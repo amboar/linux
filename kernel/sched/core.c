@@ -84,6 +84,7 @@
 #endif
 
 #include "sched.h"
+#include "io_latency.h"
 #include "../workqueue_internal.h"
 #include "../smpboot.h"
 
@@ -4380,7 +4381,9 @@ void __sched io_schedule(void)
 	atomic_inc(&rq->nr_iowait);
 	blk_flush_plug(current);
 	current->in_iowait = 1;
+	io_latency_begin(rq, current);
 	schedule();
+	io_latency_end(rq, current);
 	current->in_iowait = 0;
 	atomic_dec(&rq->nr_iowait);
 	delayacct_blkio_end();
@@ -4396,7 +4399,9 @@ long __sched io_schedule_timeout(long timeout)
 	atomic_inc(&rq->nr_iowait);
 	blk_flush_plug(current);
 	current->in_iowait = 1;
+	io_latency_begin(rq, current);
 	ret = schedule_timeout(timeout);
+	io_latency_end(rq, current);
 	current->in_iowait = 0;
 	atomic_dec(&rq->nr_iowait);
 	delayacct_blkio_end();
@@ -7106,6 +7111,7 @@ void __init sched_init(void)
 #endif
 		init_rq_hrtick(rq);
 		atomic_set(&rq->nr_iowait, 0);
+		io_latency_init(rq);
 	}
 
 	set_load_weight(&init_task);

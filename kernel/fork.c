@@ -351,7 +351,9 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
 #endif
 	tsk->splice_pipe = NULL;
 	tsk->task_frag.page = NULL;
-
+#ifdef CONFIG_SCHED_IO_LATENCY
+	tsk->io_latency.avg_latency = 0;
+#endif
 	account_kernel_stack(ti, 1);
 
 	return tsk;

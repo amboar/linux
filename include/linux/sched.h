@@ -1232,6 +1232,16 @@ enum perf_event_task_context {
 	perf_nr_task_contexts,
 };
 
+
+#ifdef CONFIG_SCHED_IO_LATENCY
+struct io_latency_node {
+	struct rb_node node;
+	unsigned int avg_latency;
+	ktime_t start_time;
+	ktime_t end_time;
+};
+#endif
+
 struct task_struct {
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	void *stack;
@@ -1660,6 +1670,9 @@ struct task_struct {
 #if defined(CONFIG_BCACHE) || defined(CONFIG_BCACHE_MODULE)
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
+#endif
+#ifdef CONFIG_SCHED_IO_LATENCY
+	struct io_latency_node io_latency;
 #endif
 };
 

@@ -1230,6 +1230,17 @@ config SCHED_AUTOGROUP
 	  desktop applications.  Task group autogeneration is currently based
 	  upon task session.
 
+config SCHED_IO_LATENCY
+	bool "IO latency tracking for the scheduler"
+	depends on SMP
+	help
+	  This option tracks for each task the io latency average time it has
+	  been blocked on for each cpu. It helps to have more information
+	  regarding how long a cpu will be idle and to take better scheduling
+	  decision.
+
+	  If unsure, say Y.
+
 config SYSFS_DEPRECATED
 	bool "Enable deprecated sysfs features to support old userspace tools"
 	depends on SYSFS
