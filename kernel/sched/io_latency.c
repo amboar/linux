@@ -17,6 +17,9 @@
 
 #include "sched.h"
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/io_latency.h>
+
 struct io_latency_tree {
 	spinlock_t lock;
 	struct rb_root tree;
@@ -432,4 +435,8 @@ void io_latency_end(struct rq *rq, struct task_struct *tsk)
 	spin_unlock(&latency_tree->lock);
 
 	io_latency_avg(tsk);
+
+	trace_io_latency_entry(
+		ktime_to_us(ktime_sub(old->end_time, old->start_time)),
+		old->avg_latency);
 }
