@@ -62,6 +62,10 @@ unsigned int normalized_sysctl_sched_latency = 6000000ULL;
 enum sched_tunable_scaling sysctl_sched_tunable_scaling
 	= SCHED_TUNABLESCALING_LOG;
 
+#ifdef CONFIG_SMP
+unsigned int sysctl_sched_energy_option = 0; /* Experimental code, disabled by default */
+#endif
+
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)

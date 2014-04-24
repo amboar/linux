@@ -48,6 +48,14 @@ enum sched_tunable_scaling {
 };
 extern enum sched_tunable_scaling sysctl_sched_tunable_scaling;
 
+#ifdef CONFIG_SMP
+extern unsigned int sysctl_sched_energy_option;
+
+int sched_proc_energy_option_handler(struct ctl_table *table, int write,
+                                void __user *buffer, size_t *lenp,
+                                loff_t *ppos);
+#endif
+
 extern unsigned int sysctl_numa_balancing_scan_delay;
 extern unsigned int sysctl_numa_balancing_scan_period_min;
 extern unsigned int sysctl_numa_balancing_scan_period_max;
