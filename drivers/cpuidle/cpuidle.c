@@ -122,6 +122,8 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	trace_cpu_idle_rcuidle(index, dev->cpu);
 	time_start = ktime_get();
 
+	target_state->idle_start = ktime_to_us(time_start);
+
 	entered_state = target_state->enter(dev, drv, index);
 
 	time_end = ktime_get();
@@ -133,6 +135,8 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	diff = ktime_to_us(ktime_sub(time_end, time_start));
 	if (diff > INT_MAX)
 		diff = INT_MAX;
+
+	target_state->idle_start = 0;
 
 	dev->last_residency = (int) diff;
 
