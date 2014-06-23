@@ -78,6 +78,7 @@ static void cpuidle_idle_call(void)
 {
 	struct cpuidle_device *dev = __this_cpu_read(cpuidle_devices);
 	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
+	int latency_req = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
 	int next_state, entered_state;
 	unsigned int broadcast;
 
@@ -102,6 +103,13 @@ static void cpuidle_idle_call(void)
 	 * step to the grace period
 	 */
 	rcu_idle_enter();
+
+	/*
+	 * The latency requirement does not allow any latency, jump to
+	 * the default idle function
+	 */
+	if (latency_req == 0)
+		goto use_default;
 
 	/*
 	 * Ask the cpuidle framework to choose a convenient idle state.

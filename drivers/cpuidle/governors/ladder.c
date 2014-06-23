@@ -71,12 +71,6 @@ static int ladder_select_state(struct cpuidle_driver *drv,
 	int last_residency, last_idx = ldev->last_state_idx;
 	int latency_req = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
 
-	/* Special case when user has set very strict latency requirement */
-	if (unlikely(latency_req == 0)) {
-		ladder_do_selection(ldev, last_idx, 0);
-		return 0;
-	}
-
 	last_state = &ldev->states[last_idx];
 
 	if (drv->states[last_idx].flags & CPUIDLE_FLAG_TIME_VALID) {
