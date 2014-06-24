@@ -8,16 +8,12 @@
  * This code is licenced under the GPL.
  */
 
-#include <linux/clockchips.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
-#include <linux/sched.h>
 #include <linux/notifier.h>
 #include <linux/pm_qos.h>
 #include <linux/cpu.h>
 #include <linux/cpuidle.h>
-#include <linux/ktime.h>
-#include <linux/hrtimer.h>
 #include <linux/module.h>
 #include <trace/events/power.h>
 
