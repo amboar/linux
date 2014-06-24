@@ -284,9 +284,10 @@ again:
  * @dev: the CPU
  */
 static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
-		       int latency_req, int next_event)
+		       struct cpuidle_times *times)
 {
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
+	int latency_req = times->latency_req;
 	int i;
 	unsigned int interactivity_req;
 	unsigned long nr_iowaiters, cpu_load;
@@ -299,7 +300,7 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	data->last_state_idx = CPUIDLE_DRIVER_STATE_START - 1;
 
 	/* determine the expected residency time, round up */
-	data->next_timer_us = next_event;
+	data->next_timer_us = times->next_timer_event;
 
 	get_iowait_load(&nr_iowaiters, &cpu_load);
 	data->bucket = which_bucket(data->next_timer_us, nr_iowaiters);

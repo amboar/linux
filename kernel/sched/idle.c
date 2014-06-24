@@ -4,7 +4,7 @@
 #include <linux/sched.h>
 #include <linux/cpu.h>
 #include <linux/cpuidle.h>
-#include <linux/tick.h>
+#include <linux/ktime.h>
 #include <linux/pm_qos.h>
 #include <linux/mm.h>
 #include <linux/stackprotector.h>
@@ -14,6 +14,7 @@
 #include <trace/events/power.h>
 
 #include "sched.h"
+#include "io_latency.h"
 
 static int __read_mostly cpu_idle_force_poll;
 
@@ -79,9 +80,9 @@ static void cpuidle_idle_call(void)
 {
 	struct cpuidle_device *dev = __this_cpu_read(cpuidle_devices);
 	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
-	struct timespec t;
-	int latency_req = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
-	unsigned int broadcast;
+	struct cpuidle_times times;
+	int next_state, entered_state;
+	bool broadcast;
 
 	/*
 	 * Check if the idle task must be rescheduled. If it is the
@@ -105,25 +106,29 @@ static void cpuidle_idle_call(void)
 	 */
 	rcu_idle_enter();
 
+	times.latency_req = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
 	/*
 	 * The latency requirement does not allow any latency, jump to
-	 * the default idle function
+	 * the default idle function without entering the cpuidle code
 	 */
-	if (latency_req == 0)
+	if (times.latency_req == 0)
 		goto use_default;
 
-	t = ktime_to_timespec(tick_nohz_get_sleep_length());
-
-	/* 
-	 * The next timer event for this in us
+	/*
+	 * Retrieve the next timer event
 	 */
-	next_event = t.tv_sec * USEC_PER_SEC + t.tv_nsec / NSEC_PER_USEC;
+	times.next_timer_event = ktime_to_us(tick_nohz_get_sleep_length());
+
+	/*
+	 * Retrieve the next IO guessed event 
+	 */
+	times.next_io_event = io_latency_get_sleep_length(this_rq());
 
 	/*
 	 * Ask the cpuidle framework to choose a convenient idle state.
 	 * Fall back to the default arch idle method on errors.
 	 */
-	next_state = cpuidle_select(drv, dev, latency_req, next_event);
+	next_state = cpuidle_select(drv, dev, &times);
 	if (next_state < 0) {
 use_default:
 		/*

@@ -159,7 +159,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
  * Returns the index of the idle state.
  */
 int cpuidle_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
-		   int latency_req, int next_event)
+		   struct cpuidle_times *times)
 {
 	if (off || !initialized)
 		return -ENODEV;
@@ -170,7 +170,7 @@ int cpuidle_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	if (unlikely(use_deepest_state))
 		return cpuidle_find_deepest_state(drv, dev);
 
-	return cpuidle_curr_governor->select(drv, dev, latency_req, next_event);
+	return cpuidle_curr_governor->select(drv, dev, times);
 }
 
 /**

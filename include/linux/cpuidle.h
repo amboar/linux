@@ -84,6 +84,12 @@ struct cpuidle_device {
 #endif
 };
 
+struct cpuidle_times {
+	unsigned int latency_req;
+	unsigned int next_timer_event;
+	unsigned int next_io_event;
+};
+
 DECLARE_PER_CPU(struct cpuidle_device *, cpuidle_devices);
 DECLARE_PER_CPU(struct cpuidle_device, cpuidle_dev);
 
@@ -124,7 +130,7 @@ extern void disable_cpuidle(void);
 
 extern int cpuidle_select(struct cpuidle_driver *drv,
 			  struct cpuidle_device *dev,
-			  int latency_req, int next_event);
+			  struct cpuidle_times *times);
 extern int cpuidle_enter(struct cpuidle_driver *drv,
 			 struct cpuidle_device *dev, int index);
 extern void cpuidle_reflect(struct cpuidle_device *dev, int index);
@@ -153,7 +159,7 @@ extern struct cpuidle_driver *cpuidle_get_cpu_driver(struct cpuidle_device *dev)
 static inline void disable_cpuidle(void) { }
 static inline int cpuidle_select(struct cpuidle_driver *drv,
 				 struct cpuidle_device *dev,
-				 int latency_req, int next_event)
+				 struct cpuidle_times *times)
 {return -ENODEV; }
 static inline int cpuidle_enter(struct cpuidle_driver *drv,
 				struct cpuidle_device *dev, int index)
@@ -209,7 +215,7 @@ struct cpuidle_governor {
 
 	int  (*select)		(struct cpuidle_driver *drv,
 				 struct cpuidle_device *dev,
-				 int latency_req, int next_event);
+				 struct cpuidle_times *times);
 	void (*reflect)		(struct cpuidle_device *dev, int index);
 
 	struct module 		*owner;
