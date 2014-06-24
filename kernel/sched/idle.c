@@ -5,6 +5,7 @@
 #include <linux/cpu.h>
 #include <linux/cpuidle.h>
 #include <linux/tick.h>
+#include <linux/pm_qos.h>
 #include <linux/mm.h>
 #include <linux/stackprotector.h>
 
@@ -115,7 +116,7 @@ static void cpuidle_idle_call(void)
 	 * Ask the cpuidle framework to choose a convenient idle state.
 	 * Fall back to the default arch idle method on errors.
 	 */
-	next_state = cpuidle_select(drv, dev);
+	next_state = cpuidle_select(drv, dev, latency_req);
 	if (next_state < 0) {
 use_default:
 		/*
