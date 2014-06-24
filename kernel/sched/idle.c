@@ -79,8 +79,8 @@ static void cpuidle_idle_call(void)
 {
 	struct cpuidle_device *dev = __this_cpu_read(cpuidle_devices);
 	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
+	struct timespec t;
 	int latency_req = pm_qos_request(PM_QOS_CPU_DMA_LATENCY);
-	int next_state, entered_state;
 	unsigned int broadcast;
 
 	/*
@@ -112,11 +112,18 @@ static void cpuidle_idle_call(void)
 	if (latency_req == 0)
 		goto use_default;
 
+	t = ktime_to_timespec(tick_nohz_get_sleep_length());
+
+	/* 
+	 * The next timer event for this in us
+	 */
+	next_event = t.tv_sec * USEC_PER_SEC + t.tv_nsec / NSEC_PER_USEC;
+
 	/*
 	 * Ask the cpuidle framework to choose a convenient idle state.
 	 * Fall back to the default arch idle method on errors.
 	 */
-	next_state = cpuidle_select(drv, dev, latency_req);
+	next_state = cpuidle_select(drv, dev, latency_req, next_event);
 	if (next_state < 0) {
 use_default:
 		/*

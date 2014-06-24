@@ -13,10 +13,6 @@
 #include <linux/kernel.h>
 #include <linux/cpuidle.h>
 #include <linux/pm_qos.h>
-#include <linux/time.h>
-#include <linux/ktime.h>
-#include <linux/hrtimer.h>
-#include <linux/tick.h>
 #include <linux/sched.h>
 #include <linux/math64.h>
 #include <linux/module.h>
@@ -288,7 +284,7 @@ again:
  * @dev: the CPU
  */
 static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
-		       int latency_req)
+		       int latency_req, int next_event)
 {
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
 	int i;
@@ -303,7 +299,7 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	data->last_state_idx = CPUIDLE_DRIVER_STATE_START - 1;
 
 	/* determine the expected residency time, round up */
-	data->next_timer_us = ktime_to_us(tick_nohz_get_sleep_length());
+	data->next_timer_us = next_event;
 
 	get_iowait_load(&nr_iowaiters, &cpu_load);
 	data->bucket = which_bucket(data->next_timer_us, nr_iowaiters);

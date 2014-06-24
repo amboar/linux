@@ -123,7 +123,8 @@ struct cpuidle_driver {
 extern void disable_cpuidle(void);
 
 extern int cpuidle_select(struct cpuidle_driver *drv,
-			  struct cpuidle_device *dev, int latency_req);
+			  struct cpuidle_device *dev,
+			  int latency_req, int next_event);
 extern int cpuidle_enter(struct cpuidle_driver *drv,
 			 struct cpuidle_device *dev, int index);
 extern void cpuidle_reflect(struct cpuidle_device *dev, int index);
@@ -151,7 +152,8 @@ extern struct cpuidle_driver *cpuidle_get_cpu_driver(struct cpuidle_device *dev)
 #else
 static inline void disable_cpuidle(void) { }
 static inline int cpuidle_select(struct cpuidle_driver *drv,
-				 struct cpuidle_device *dev, int latency_req)
+				 struct cpuidle_device *dev,
+				 int latency_req, int next_event)
 {return -ENODEV; }
 static inline int cpuidle_enter(struct cpuidle_driver *drv,
 				struct cpuidle_device *dev, int index)
@@ -207,7 +209,7 @@ struct cpuidle_governor {
 
 	int  (*select)		(struct cpuidle_driver *drv,
 				 struct cpuidle_device *dev,
-				 int latency_req);
+				 int latency_req, int next_event);
 	void (*reflect)		(struct cpuidle_device *dev, int index);
 
 	struct module 		*owner;
