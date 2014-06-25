@@ -20,3 +20,4 @@ obj-$(CONFIG_SCHEDSTATS) += stats.o
 obj-$(CONFIG_SCHED_DEBUG) += debug.o
 obj-$(CONFIG_CGROUP_CPUACCT) += cpuacct.o
 obj-$(CONFIG_SCHED_IO_LATENCY) += io_latency.o
+obj-$(CONFIG_SCHED_IDLE_DEBUG) += idle_debug.o

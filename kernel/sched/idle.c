@@ -15,6 +15,7 @@
 
 #include "sched.h"
 #include "io_latency.h"
+#include "idle_debug.h"
 
 static int __read_mostly cpu_idle_force_poll;
 
@@ -180,6 +181,11 @@ use_default:
 
 	/* The cpu is no longer idle or about to enter idle. */
 	idle_set_state(this_rq(), NULL);
+
+	/*
+	 * Update the prediction rating
+	 */
+	idle_debug_prediction_update(drv, dev, &times, entered_state);
 
 	if (broadcast)
 		clockevents_notify(CLOCK_EVT_NOTIFY_BROADCAST_EXIT, &dev->cpu);
