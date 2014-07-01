@@ -7037,6 +7037,8 @@ void __init sched_init(void)
 	autogroup_init(&init_task);
 
 #endif /* CONFIG_CGROUP_SCHED */
+	
+	io_latency_init();
 
 	for_each_possible_cpu(i) {
 		struct rq *rq;
@@ -7111,7 +7113,6 @@ void __init sched_init(void)
 #endif
 		init_rq_hrtick(rq);
 		atomic_set(&rq->nr_iowait, 0);
-		io_latency_init(rq);
 	}
 
 	set_load_weight(&init_task);

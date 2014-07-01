@@ -11,12 +11,12 @@
  */
 
 #ifdef CONFIG_SCHED_IO_LATENCY
-extern void io_latency_init(struct rq *rq);
+extern void io_latency_init(void);
 extern int  io_latency_begin(struct rq *rq, struct task_struct *tsk);
 extern void io_latency_end(struct rq *rq, struct task_struct *tsk);
 extern int  io_latency_get_sleep_length(struct rq *rq);
 #else
-static inline void io_latency_init(struct rq *rq)
+static inline void io_latency_init(void)
 {
 	;
 }

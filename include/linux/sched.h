@@ -1239,7 +1239,15 @@ struct io_latency_node {
 	unsigned int avg_latency;
 	ktime_t start_time;
 	ktime_t end_time;
+	struct list_head bucket_list;
 };
+
+void exit_io_latency(struct task_struct *tsk);
+#else
+static inline void exit_io_latency(struct task_struct *tsk)
+{
+	;
+}
 #endif
 
 struct task_struct {
