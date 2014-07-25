@@ -31,6 +31,16 @@
 #include <asm/apic.h>
 #include <asm/nmi.h>
 #include <asm/trace/irq_vectors.h>
+
+#define CREATE_TRACE_POINTS
+/*
+ * Those were defined in <asm/trace/irq_vectors.h> and cause problems
+ * when including <trace/events/ipi.h>.
+ */
+#undef TRACE_INCLUDE_PATH
+#undef TRACE_INCLUDE_FILE
+#include <trace/events/ipi.h>
+
 /*
  *	Some notes on x86 processor bugs affecting SMP operation:
  *
@@ -124,17 +134,21 @@ static void native_smp_send_reschedule(int cpu)
 		WARN_ON(1);
 		return;
 	}
+	trace_ipi_raise(cpumask_of(cpu), tracepoint_string("RESCHEDULE"));
 	apic->send_IPI_mask(cpumask_of(cpu), RESCHEDULE_VECTOR);
 }
 
 void native_send_call_func_single_ipi(int cpu)
 {
+	trace_ipi_raise(cpumask_of(cpu), tracepoint_string("CALL_FUNCTION_SINGLE"));
 	apic->send_IPI_mask(cpumask_of(cpu), CALL_FUNCTION_SINGLE_VECTOR);
 }
 
 void native_send_call_func_ipi(const struct cpumask *mask)
 {
 	cpumask_var_t allbutself;
+
+	trace_ipi_raise(mask, tracepoint_string("CALL_FUNCTION"));
 
 	if (!alloc_cpumask_var(&allbutself, GFP_ATOMIC)) {
 		apic->send_IPI_mask(mask, CALL_FUNCTION_VECTOR);
@@ -252,8 +266,10 @@ finish:
  */
 static inline void __smp_reschedule_interrupt(void)
 {
+	trace_ipi_entry(tracepoint_string("RESCHEDULE"));
 	inc_irq_stat(irq_resched_count);
 	scheduler_ipi();
+	trace_ipi_exit(tracepoint_string("RESCHEDULE"));
 }
 
 __visible void smp_reschedule_interrupt(struct pt_regs *regs)
@@ -291,8 +307,10 @@ __visible void smp_trace_reschedule_interrupt(struct pt_regs *regs)
 
 static inline void __smp_call_function_interrupt(void)
 {
+	trace_ipi_entry(tracepoint_string("CALL_FUNCTION"));
 	generic_smp_call_function_interrupt();
 	inc_irq_stat(irq_call_count);
+	trace_ipi_exit(tracepoint_string("CALL_FUNCTION"));
 }
 
 __visible void smp_call_function_interrupt(struct pt_regs *regs)
@@ -313,8 +331,10 @@ __visible void smp_trace_call_function_interrupt(struct pt_regs *regs)
 
 static inline void __smp_call_function_single_interrupt(void)
 {
+	trace_ipi_entry(tracepoint_string("CALL_FUNCTION_SINGLE"));
 	generic_smp_call_function_single_interrupt();
 	inc_irq_stat(irq_call_count);
+	trace_ipi_exit(tracepoint_string("CALL_FUNCTION_SINGLE"));
 }
 
 __visible void smp_call_function_single_interrupt(struct pt_regs *regs)
