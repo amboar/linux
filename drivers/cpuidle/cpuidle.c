@@ -143,6 +143,14 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 		 */
 		dev->states_usage[entered_state].time += dev->last_residency;
 		dev->states_usage[entered_state].usage++;
+		if (diff < dev->last_residency)
+			atomic_inc(&dev->over_estimate);
+		else if (entered_state < (drv->state_count - 1) &&
+			 dev->last_residency <
+			 drv->states[entered_state + 1].target_residency)
+			atomic_inc(&dev->under_estimate);
+		else
+			atomic_inc(&dev->right_estimate);
 	} else {
 		dev->last_residency = 0;
 	}
