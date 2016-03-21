@@ -1,0 +1,16 @@
+#include "aspeed-bmc-opp-palmetto.dts"
+
+/ {
+	ahb {
+		mac1: ethernet@1e680000 {
+			compatible = "cdns,gem";
+			reg = <0x1e680000 0x1000>;
+			interrupts = <3>;
+			clock-names = "pclk", "hclk", "tx_clk";
+			clocks = <&clk_apb>, <&clk_apb>, <&clk_apb>;
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+	};
+};
