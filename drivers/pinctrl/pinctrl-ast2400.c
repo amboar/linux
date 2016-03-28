@@ -70,12 +70,12 @@ static bool pin_expr_or(void  __iomem *base, struct ast_pin_expr *expr)
 }
 
 struct ast_pinctrl_desc {
-	struct ast_pin_expr *f1;
-	struct ast_pin_expr *f2;
+	struct ast_pin_expr *high;
+	struct ast_pin_expr *low;
 };
 
-#define CTRL_HIGH_PRIO 1
-#define CTRL_LOW_PRIO 2
+#define CTRL_HIGH_PRIO high
+#define CTRL_LOW_PRIO low
 
 #define AST_CTRL_DESC(_op, _reg, _mask, _val) \
 	{ .op = _op, .reg = _reg, .mask = _mask, .val = _val }
@@ -86,26 +86,26 @@ struct ast_pinctrl_desc {
 #define AST_CTRL_DESC_NEQ(_reg, _mask, _val) \
 	AST_CTRL_DESC(pin_expr_neq, _reg, _mask, _val)
 
-#define _AST_PIN_EXPR_OP(_ball, _fn, _op, _ndescs, ...) \
-	static struct ast_pin_expr pin_expr_f##_fn##_##_ball = { \
+#define _AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, ...) \
+	static struct ast_pin_expr pin_expr_##_prio##_##_ball = { \
 		.op = _op, .ndescs = _ndescs, .descs = { __VA_ARGS__, }, \
 	}
 
-#define AST_PIN_EXPR_OP(_ball, _fn, _op, _ndescs, ...) \
-	_AST_PIN_EXPR_OP(_ball, _fn, _op, _ndescs, __VA_ARGS__)
+#define AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, ...) \
+	_AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, __VA_ARGS__)
 
-#define AST_PIN_EXPR(_ball, _fn, ...) \
-	AST_PIN_EXPR_OP(_ball, _fn, NULL, 1, __VA_ARGS__)
+#define AST_PIN_EXPR(_ball, _prio, ...) \
+	AST_PIN_EXPR_OP(_ball, _prio, NULL, 1, __VA_ARGS__)
 
-#define _AST_PIN_MF(_ball, _f1, _f2) \
-	static struct ast_pinctrl_desc ball_##_ball = { .f1 = _f1, .f2 = _f2, }
+#define _AST_PIN_MF(_ball, _high, _low) \
+	static struct ast_pinctrl_desc ball_##_ball = { .high = _high, .low = _low, }
 
 #define AST_PIN_MF(_ball) \
-	_AST_PIN_MF(_ball, &pin_expr_f1_##_ball, &pin_expr_f2_##_ball)
+	_AST_PIN_MF(_ball, &pin_expr_high_##_ball, &pin_expr_low_##_ball)
 
-#define AST_PIN_SF_OP(_ball, _fn, _op, _ndescs, ...) \
-	AST_PIN_EXPR_OP(_ball, _fn, _op, _ndescs, __VA_ARGS__); \
-	_AST_PIN_MF(_ball, &pin_expr_f##_fn##_##_ball, NULL)
+#define AST_PIN_SF_OP(_ball, _prio, _op, _ndescs, ...) \
+	AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, __VA_ARGS__); \
+	_AST_PIN_MF(_ball, &pin_expr_##_prio##_##_ball, NULL)
 
 #define AST_PIN_SF(_ball, ...) \
 	AST_PIN_SF_OP(_ball, 1, NULL, 1, __VA_ARGS__)
