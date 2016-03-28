@@ -74,6 +74,8 @@ struct ast_pinctrl_desc {
 	struct ast_pin_expr *low;
 };
 
+/* Macro hell, better to see how they're used and work backwards */
+
 #define CTRL_HIGH_PRIO high
 #define CTRL_LOW_PRIO low
 
@@ -109,8 +111,8 @@ struct ast_pinctrl_desc {
 #define AST_PIN_EXPR(_ball, _prio, ...) \
 	_AST_PIN_EXPR_OP(_ball, _prio, NULL, __VA_ARGS__)
 
-#define OR_EXPR(a, b) pin_expr_or, a, b
-#define AND_EXPR(a, b) pin_expr_and, a, b
+#define OR_EXPR(...) pin_expr_or, __VA_ARGS__
+#define AND_EXPR(...) pin_expr_and, __VA_ARGS__
 
 #define AST_PIN_MF(_ball) \
 	_AST_PIN_MF(_ball, &pin_expr_##_ball##_high, &pin_expr_##_ball##_low)
@@ -119,15 +121,16 @@ struct ast_pinctrl_desc {
 	AST_PIN_EXPR_OP(_ball, _prio, _op, __VA_ARGS__); \
 	_AST_PIN_MF(_ball, &pin_expr_##_ball##_##_prio, NULL)
 
-#define AST_PIN_SF_OP(_ball, _prio, _op, ...) \
-	_AST_PIN_SF_OP(_ball, _prio, _op, __VA_ARGS__)
+#define AST_PIN_SF_OP(_ball, _op, ...) \
+	_AST_PIN_SF_OP(_ball, high, _op, __VA_ARGS__)
 
 #define AST_PIN_SF(_ball, ...) \
-	AST_PIN_SF_OP(_ball, CTRL_HIGH_PRIO, NULL, __VA_ARGS__)
+	AST_PIN_SF_OP(_ball, NULL, __VA_ARGS__)
 
 #define SCU3C 0x3C
 #define SCU3C 0x3C
 #define SCU70 0x70
+#define STRAP 0x70
 #define SCU80 0x80
 #define SCU84 0x84
 #define SCU88 0x88
@@ -139,6 +142,10 @@ AST_PIN_SF(D6, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(0), 1));
 AST_PIN_SF(B5, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(1), 1));
 AST_PIN_SF(A4, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(2), 1));
 AST_PIN_SF(E6, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(3), 1));
+
+AST_PIN_EXPR(C5, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
+AST_PIN_EXPR(C5, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
+AST_PIN_MF(C5);
 
 AST_PIN_EXPR(B4, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
 AST_PIN_EXPR(B4, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(5), 1));
@@ -157,14 +164,35 @@ AST_PIN_SF(J20, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(9), 1));
 AST_PIN_SF(H18, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(10), 1));
 AST_PIN_SF(F18, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(11), 1));
 
-AST_PIN_EXPR(C5, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
-AST_PIN_EXPR(C5, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
-AST_PIN_MF(C5);
+AST_PIN_SF_OP(E19, OR_EXPR(
+	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(12), 1),
+		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(14), 1)));
+
+/* H19: Need magic for SIORD30
+AST_PIN_EXPR_OP(H19, CTRL_HIGH_PRIO, AND_EXPR(
+	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
+		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1)));
+AST_PIN_EXPR_OP(H19, CTRL_LOW_PRIO, AND_EXPR(
+	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
+		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1)));
+AST_PIN_MF(H19);
+*/
+
+AST_PIN_SF(H20, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
+
+AST_PIN_EXPR_OP(E18, CTRL_HIGH_PRIO, AND_EXPR(
+	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
+		AST_CTRL_DESC_EQ(SCU90, BIT_MASK(31), 0),
+		AST_CTRL_DESC_EQ(SCU3C, BIT_MASK(3), 1)));
+AST_PIN_EXPR_OP(E18, CTRL_LOW_PRIO, AND_EXPR(
+	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
+		AST_CTRL_DESC_EQ(SCU90, BIT_MASK(31), 1)));
+AST_PIN_MF(E18);
 
 AST_PIN_EXPR(A18, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
 AST_PIN_EXPR_OP(A18, CTRL_LOW_PRIO, OR_EXPR(
 	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
-		AST_CTRL_DESC_EQ(SCU70, BIT_MASK(21), 1)));
+		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1)));
 AST_PIN_MF(A18);
 
 struct ast2400_pin_function {
