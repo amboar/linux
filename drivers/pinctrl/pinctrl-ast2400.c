@@ -88,7 +88,7 @@ struct ast_pinctrl_desc {
 
 #define _AST_CTRL_DESC(_ball, _prio, ...) \
 	static struct ast_ctrl_desc ctrl_desc_##_ball##_##_prio[] = \
-		{ __VA_ARGS__, }
+		{ __VA_ARGS__ }
 
 #define _AST_PIN_EXPR_OP(_ball, _prio, _op, ...) \
 	_AST_CTRL_DESC(_ball, _prio, __VA_ARGS__); \
@@ -108,6 +108,9 @@ struct ast_pinctrl_desc {
 
 #define AST_PIN_EXPR(_ball, _prio, ...) \
 	_AST_PIN_EXPR_OP(_ball, _prio, NULL, __VA_ARGS__)
+
+#define OR_EXPR(a, b) pin_expr_or, a, b
+#define AND_EXPR(a, b) pin_expr_and, a, b
 
 #define AST_PIN_MF(_ball) \
 	_AST_PIN_MF(_ball, &pin_expr_##_ball##_high, &pin_expr_##_ball##_low)
@@ -159,9 +162,9 @@ AST_PIN_EXPR(C5, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
 AST_PIN_MF(C5);
 
 AST_PIN_EXPR(A18, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
-AST_PIN_EXPR_OP(A18, CTRL_LOW_PRIO, pin_expr_or,
+AST_PIN_EXPR_OP(A18, CTRL_LOW_PRIO, OR_EXPR(
 	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
-		AST_CTRL_DESC_EQ(SCU70, BIT_MASK(21), 1));
+		AST_CTRL_DESC_EQ(SCU70, BIT_MASK(21), 1)));
 AST_PIN_MF(A18);
 
 struct ast2400_pin_function {
