@@ -42,7 +42,7 @@ static bool pin_expr_neq(void __iomem *base, struct ast_ctrl_desc *desc)
 struct ast_pin_expr {
 	bool (*op)(void __iomem *, struct ast_pin_expr *);
 	int ndescs;
-	struct ast_ctrl_desc descs[];
+	struct ast_ctrl_desc *descs;
 };
 
 static bool pin_expr_and(void __iomem *base, struct ast_pin_expr *expr)
@@ -86,29 +86,41 @@ struct ast_pinctrl_desc {
 #define AST_CTRL_DESC_NEQ(_reg, _mask, _val) \
 	AST_CTRL_DESC(pin_expr_neq, _reg, _mask, _val)
 
-#define _AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, ...) \
-	static struct ast_pin_expr pin_expr_##_prio##_##_ball = { \
-		.op = _op, .ndescs = _ndescs, .descs = { __VA_ARGS__, }, \
+#define _AST_CTRL_DESC(_ball, _prio, ...) \
+	static struct ast_ctrl_desc ctrl_desc_##_ball##_##_prio[] = \
+		{ __VA_ARGS__, }
+
+#define _AST_PIN_EXPR_OP(_ball, _prio, _op, ...) \
+	_AST_CTRL_DESC(_ball, _prio, __VA_ARGS__); \
+	\
+	static struct ast_pin_expr pin_expr_##_ball##_##_prio = { \
+		.op = _op, \
+		.ndescs = ARRAY_SIZE(ctrl_desc_##_ball##_##_prio), \
+		.descs = &ctrl_desc_##_ball##_##_prio[0], \
 	}
 
-#define AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, ...) \
-	_AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, __VA_ARGS__)
+#define _AST_PIN_MF(_ball, _high, _low) \
+	static struct ast_pinctrl_desc ball_##_ball = \
+		{ .high = _high, .low = _low, }
+
+#define AST_PIN_EXPR_OP(_ball, _prio, _op, ...) \
+	_AST_PIN_EXPR_OP(_ball, _prio, _op, __VA_ARGS__)
 
 #define AST_PIN_EXPR(_ball, _prio, ...) \
-	AST_PIN_EXPR_OP(_ball, _prio, NULL, 1, __VA_ARGS__)
-
-#define _AST_PIN_MF(_ball, _high, _low) \
-	static struct ast_pinctrl_desc ball_##_ball = { .high = _high, .low = _low, }
+	_AST_PIN_EXPR_OP(_ball, _prio, NULL, __VA_ARGS__)
 
 #define AST_PIN_MF(_ball) \
-	_AST_PIN_MF(_ball, &pin_expr_high_##_ball, &pin_expr_low_##_ball)
+	_AST_PIN_MF(_ball, &pin_expr_##_ball##_high, &pin_expr_##_ball##_low)
 
-#define AST_PIN_SF_OP(_ball, _prio, _op, _ndescs, ...) \
-	AST_PIN_EXPR_OP(_ball, _prio, _op, _ndescs, __VA_ARGS__); \
-	_AST_PIN_MF(_ball, &pin_expr_##_prio##_##_ball, NULL)
+#define _AST_PIN_SF_OP(_ball, _prio, _op, ...) \
+	AST_PIN_EXPR_OP(_ball, _prio, _op, __VA_ARGS__); \
+	_AST_PIN_MF(_ball, &pin_expr_##_ball##_##_prio, NULL)
+
+#define AST_PIN_SF_OP(_ball, _prio, _op, ...) \
+	_AST_PIN_SF_OP(_ball, _prio, _op, __VA_ARGS__)
 
 #define AST_PIN_SF(_ball, ...) \
-	AST_PIN_SF_OP(_ball, 1, NULL, 1, __VA_ARGS__)
+	AST_PIN_SF_OP(_ball, CTRL_HIGH_PRIO, NULL, __VA_ARGS__)
 
 #define SCU3C 0x3C
 #define SCU3C 0x3C
@@ -147,7 +159,7 @@ AST_PIN_EXPR(C5, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
 AST_PIN_MF(C5);
 
 AST_PIN_EXPR(A18, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
-AST_PIN_EXPR_OP(A18, CTRL_LOW_PRIO, pin_expr_or, 2,
+AST_PIN_EXPR_OP(A18, CTRL_LOW_PRIO, pin_expr_or,
 	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		AST_CTRL_DESC_EQ(SCU70, BIT_MASK(21), 1));
 AST_PIN_MF(A18);
