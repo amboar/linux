@@ -102,6 +102,7 @@ static bool func_expr_or(void  __iomem *base, struct pin_func_expr *expr)
 
 struct pin_func_prio {
 	const char *ball;
+	const char *fallback;
 	struct pin_func_expr *high;
 	struct pin_func_expr *low;
 };
@@ -130,17 +131,21 @@ struct pin_func_prio {
 #define BALL_SYM__(_ball) ball_##_ball
 #define BALL_SYM(_ball) BALL_SYM__(_ball)
 
-#define MF_PIN_(_ball, _high, _low) \
-	static struct pin_func_prio BALL_SYM(_ball) = \
-		{ .ball = #_ball, .high = _high, .low = _low, }
+#define MF_PIN_(_ball, _fallback, _high, _low) \
+	static struct pin_func_prio BALL_SYM(_ball) = { \
+		.ball = #_ball, \
+		.fallback = _fallback, \
+		.high = _high, \
+		.low = _low, \
+	}
 
-#define SF_PIN_OP_(_ball, _name, _prio, _op, ...) \
+#define SF_PIN_OP_(_ball, _fallback, _name, _prio, _op, ...) \
 	CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
 	FUNC_EXPR_OP_(_ball, _name, _prio, _op); \
-	MF_PIN_(_ball, &FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), NULL)
+	MF_PIN_(_ball, _fallback, &FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), NULL)
 
-#define SF_PIN_OP__(_ball, _name, _prio, _op, ...) \
-	SF_PIN_OP_(_ball, _name, _prio, _op, __VA_ARGS__)
+#define SF_PIN_OP__(_ball, _fallback, _name, _prio, _op, ...) \
+	SF_PIN_OP_(_ball, _fallback, _name, _prio, _op, __VA_ARGS__)
 
 /* The non-internal macros */
 
@@ -172,17 +177,18 @@ struct pin_func_prio {
  * to invoke FUNC_EXPR() or FUNC_EXPR_OP() for both CTRL_HIGH_PRIO and
  * CTRL_LOW_PRIO to define the expressions before invoking MF_PIN().
  * Failure to do so will give a compilation error. */
-#define MF_PIN(_ball) \
-	MF_PIN_(_ball, &FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), \
+#define MF_PIN(_ball, _fallback) \
+	MF_PIN_(_ball, _fallback, \
+		       	&FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), \
 		       	&FUNC_EXPR_SYM(_ball, CTRL_LOW_PRIO))
 
 /* Single function pin, enabled by a multi-element pin expression */
-#define SF_PIN_OP(_ball, _name, _op, ...) \
-	SF_PIN_OP__(_ball, _name, CTRL_HIGH_PRIO, _op, __VA_ARGS__)
+#define SF_PIN_OP(_ball, _fallback, _name, _op, ...) \
+	SF_PIN_OP__(_ball, _fallback, _name, CTRL_HIGH_PRIO, _op, __VA_ARGS__)
 
 /* Single function pin, enabled by a simple pin description */
-#define SF_PIN(_ball, _name, ...) \
-	SF_PIN_OP(_ball, _name, NULL, __VA_ARGS__)
+#define SF_PIN(_ball, _fallback, _name, ...) \
+	SF_PIN_OP(_ball, _fallback, _name, NULL, __VA_ARGS__)
 
 #define SCU3C 0x3C
 #define SCU3C 0x3C
@@ -195,33 +201,33 @@ struct pin_func_prio {
 #define SCU90 0x90
 #define SCU94 0x94
 
-SF_PIN(D6, "MAC1LINK", CTRL_DESC_EQ(SCU80, BIT_MASK(0), 1));
-SF_PIN(B5, "MAC2LINK", CTRL_DESC_EQ(SCU80, BIT_MASK(1), 1));
-SF_PIN(A4, "TIMER3", CTRL_DESC_EQ(SCU80, BIT_MASK(2), 1));
-SF_PIN(E6, "TIMER4", CTRL_DESC_EQ(SCU80, BIT_MASK(3), 1));
+SF_PIN(D6, "GPIOA0", "MAC1LINK", CTRL_DESC_EQ(SCU80, BIT_MASK(0), 1));
+SF_PIN(B5, "GPIOA1", "MAC2LINK", CTRL_DESC_EQ(SCU80, BIT_MASK(1), 1));
+SF_PIN(A4, "GPIOA2", "TIMER3", CTRL_DESC_EQ(SCU80, BIT_MASK(2), 1));
+SF_PIN(E6, "GPIOA3", "TIMER4", CTRL_DESC_EQ(SCU80, BIT_MASK(3), 1));
 
 FUNC_EXPR(C5, "SCL9", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
 FUNC_EXPR(C5, "TIMER5", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
-MF_PIN(C5);
+MF_PIN(C5, "GPIOA4");
 
 FUNC_EXPR(B4, "SDA9", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
 FUNC_EXPR(B4, "TIMER6", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(5), 1));
-MF_PIN(B4);
+MF_PIN(B4, "GPIOA5");
 
 FUNC_EXPR(A3, "MDC2", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
 FUNC_EXPR(A3, "TIMER7", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(6), 1));
-MF_PIN(A3);
+MF_PIN(A3, "GPIOA6");
 
 FUNC_EXPR(D5, "MDIO2", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
 FUNC_EXPR(D5, "TIMER8", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(7), 1));
-MF_PIN(D5);
+MF_PIN(D5, "GPIOA7");
 
-SF_PIN(J21, "SALT1", CTRL_DESC_EQ(SCU80, BIT_MASK(8), 1));
-SF_PIN(J20, "SALT2", CTRL_DESC_EQ(SCU80, BIT_MASK(9), 1));
-SF_PIN(H18, "SALT3", CTRL_DESC_EQ(SCU80, BIT_MASK(10), 1));
-SF_PIN(F18, "SALT4", CTRL_DESC_EQ(SCU80, BIT_MASK(11), 1));
+SF_PIN(J21, "GPIOB0", "SALT1", CTRL_DESC_EQ(SCU80, BIT_MASK(8), 1));
+SF_PIN(J20, "GPIOB1", "SALT2", CTRL_DESC_EQ(SCU80, BIT_MASK(9), 1));
+SF_PIN(H18, "GPIOB2", "SALT3", CTRL_DESC_EQ(SCU80, BIT_MASK(10), 1));
+SF_PIN(F18, "GPIOB3", "SALT4", CTRL_DESC_EQ(SCU80, BIT_MASK(11), 1));
 
-SF_PIN_OP(E19, "LPCRST#", func_expr_or,
+SF_PIN_OP(E19, "GPIOB4", "LPCRST#", func_expr_or,
 	       	CTRL_DESC_EQ(SCU80, BIT_MASK(12), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(14), 1));
 
@@ -234,10 +240,10 @@ FUNC_EXPR_OP(H19, "LPCSMI#", CTRL_LOW_PRIO,
 		func_expr_and,
 	       	CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
-MF_PIN(H19);
+MF_PIN(H19, "GPIOB5");
 */
 
-SF_PIN(H20, "LPCPME#", CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
+SF_PIN(H20, "GPIOB6", "LPCPME#", CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
 
 FUNC_EXPR_OP(E18, "EXTRST#", CTRL_HIGH_PRIO,
 	       	func_expr_and,
@@ -248,14 +254,14 @@ FUNC_EXPR_OP(E18, "SPICS1#", CTRL_LOW_PRIO,
 	       	func_expr_and,
 	       	CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
 		CTRL_DESC_EQ(SCU90, BIT_MASK(31), 1));
-MF_PIN(E18);
+MF_PIN(E18, "GPIOB7");
 
 FUNC_EXPR(A18, "SD2CLK", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
 FUNC_EXPR_OP(A18, "GPID0(In)", CTRL_LOW_PRIO,
 	       	func_expr_or,
 	       	CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
-MF_PIN(A18);
+MF_PIN(A18, "GPIOD0");
 
 struct ast2400_pin_function {
 	const char *name;
