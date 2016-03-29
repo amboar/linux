@@ -70,9 +70,10 @@ static bool pin_desc_neq(void __iomem *base, struct ast_ctrl_desc *desc)
 }
 
 struct ast_func_expr {
-	bool (*op)(void __iomem *, struct ast_func_expr *);
+	const char *name;
 	int ndescs;
 	struct ast_ctrl_desc *descs;
+	bool (*op)(void __iomem *, struct ast_func_expr *);
 };
 
 static bool func_expr_and(void __iomem *base, struct ast_func_expr *expr)
@@ -100,6 +101,7 @@ static bool func_expr_or(void  __iomem *base, struct ast_func_expr *expr)
 }
 
 struct ast_func_prio {
+	const char *ball;
 	struct ast_func_expr *high;
 	struct ast_func_expr *low;
 };
@@ -117,35 +119,28 @@ struct ast_func_prio {
 #define AST_FUNC_EXPR_SYM__(_ball, _prio) pin_expr_##_ball##_##_prio
 #define AST_FUNC_EXPR_SYM(_ball, _prio) AST_FUNC_EXPR_SYM__(_ball, _prio)
 
-#define AST_FUNC_EXPR_OP_(_ball, _prio, _op) \
+#define AST_FUNC_EXPR_OP_(_ball, _name, _prio, _op) \
 	static struct ast_func_expr AST_FUNC_EXPR_SYM(_ball, _prio) = { \
+		.name = _name, \
 		.op = _op, \
 		.ndescs = ARRAY_SIZE(AST_CTRL_DESC_SYM(_ball, _prio)), \
 		.descs = &(AST_CTRL_DESC_SYM(_ball, _prio))[0], \
 	}
-
-#define AST_FUNC_EXPR_OP(_ball, _prio, _op, ...) \
-	AST_CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
-	AST_FUNC_EXPR_OP_(_ball, _prio, _op)
-
-#define AST_FUNC_EXPR(_ball, _prio, ...) \
-	AST_CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
-	AST_FUNC_EXPR_OP_(_ball, _prio, NULL)
 
 #define AST_BALL_SYM__(_ball) ball_##_ball
 #define AST_BALL_SYM(_ball) AST_BALL_SYM__(_ball)
 
 #define AST_PIN_MF_(_ball, _high, _low) \
 	static struct ast_func_prio AST_BALL_SYM(_ball) = \
-		{ .high = _high, .low = _low, }
+		{ .ball = #_ball, .high = _high, .low = _low, }
 
-#define AST_PIN_SF_OP_(_ball, _prio, _op, ...) \
+#define AST_PIN_SF_OP_(_ball, _name, _prio, _op, ...) \
 	AST_CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
-	AST_FUNC_EXPR_OP_(_ball, _prio, _op); \
+	AST_FUNC_EXPR_OP_(_ball, _name, _prio, _op); \
 	AST_PIN_MF_(_ball, &AST_FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), NULL)
 
-#define AST_PIN_SF_OP__(_ball, _prio, _op, ...) \
-	AST_PIN_SF_OP_(_ball, _prio, _op, __VA_ARGS__)
+#define AST_PIN_SF_OP__(_ball, _name, _prio, _op, ...) \
+	AST_PIN_SF_OP_(_ball, _name, _prio, _op, __VA_ARGS__)
 
 /* The non-internal macros */
 
@@ -165,21 +160,29 @@ struct ast_func_prio {
 	AST_CTRL_DESC(pin_desc_neq, _reg, _mask, _val)
 
 
+#define AST_FUNC_EXPR_OP(_ball, _name, _prio, _op, ...) \
+	AST_CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
+	AST_FUNC_EXPR_OP_(_ball, _name, _prio, _op)
+
+#define AST_FUNC_EXPR(_ball, _name, _prio, ...) \
+	AST_CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
+	AST_FUNC_EXPR_OP_(_ball, _name, _prio, NULL)
+
 /* Multi-function pin, i.e. has both high and low priority pin functions. Need
- * to invoke AST_FUNC_EXPR_OP() for both CTRL_HIGH_PRIO and CTRL_LOW_PRIO to
- * define the expressions before invoking AST_PIN_MF(). Failure to do so will
- * give a compilation error. */
+ * to invoke AST_FUNC_EXPR() or AST_FUNC_EXPR_OP() for both CTRL_HIGH_PRIO and
+ * CTRL_LOW_PRIO to define the expressions before invoking AST_PIN_MF().
+ * Failure to do so will give a compilation error. */
 #define AST_PIN_MF(_ball) \
 	AST_PIN_MF_(_ball, &AST_FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), \
 		       	&AST_FUNC_EXPR_SYM(_ball, CTRL_LOW_PRIO))
 
 /* Single function pin, enabled by a multi-element pin expression */
-#define AST_PIN_SF_OP(_ball, _op, ...) \
-	AST_PIN_SF_OP__(_ball, CTRL_HIGH_PRIO, _op, __VA_ARGS__)
+#define AST_PIN_SF_OP(_ball, _name, _op, ...) \
+	AST_PIN_SF_OP__(_ball, _name, CTRL_HIGH_PRIO, _op, __VA_ARGS__)
 
 /* Single function pin, enabled by a simple pin description */
-#define AST_PIN_SF(_ball, ...) \
-	AST_PIN_SF_OP(_ball, NULL, __VA_ARGS__)
+#define AST_PIN_SF(_ball, _name, ...) \
+	AST_PIN_SF_OP(_ball, _name, NULL, __VA_ARGS__)
 
 #define SCU3C 0x3C
 #define SCU3C 0x3C
@@ -192,59 +195,72 @@ struct ast_func_prio {
 #define SCU90 0x90
 #define SCU94 0x94
 
-AST_PIN_SF(D6, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(0), 1));
-AST_PIN_SF(B5, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(1), 1));
-AST_PIN_SF(A4, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(2), 1));
-AST_PIN_SF(E6, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(3), 1));
+AST_PIN_SF(D6, "MAC1LINK", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(0), 1));
+AST_PIN_SF(B5, "MAC2LINK", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(1), 1));
+AST_PIN_SF(A4, "TIMER3", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(2), 1));
+AST_PIN_SF(E6, "TIMER4", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(3), 1));
 
-AST_FUNC_EXPR(C5, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
-AST_FUNC_EXPR(C5, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
+AST_FUNC_EXPR(C5, "SCL9", CTRL_HIGH_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
+AST_FUNC_EXPR(C5, "TIMER5", CTRL_LOW_PRIO,
+		AST_CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
 AST_PIN_MF(C5);
 
-AST_FUNC_EXPR(B4, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
-AST_FUNC_EXPR(B4, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(5), 1));
+AST_FUNC_EXPR(B4, "SDA9", CTRL_HIGH_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
+AST_FUNC_EXPR(B4, "TIMER6", CTRL_LOW_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(5), 1));
 AST_PIN_MF(B4);
 
-AST_FUNC_EXPR(A3, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
-AST_FUNC_EXPR(A3, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(6), 1));
+AST_FUNC_EXPR(A3, "MDC2", CTRL_HIGH_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
+AST_FUNC_EXPR(A3, "TIMER7", CTRL_LOW_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(6), 1));
 AST_PIN_MF(A3);
 
-AST_FUNC_EXPR(D5, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
-AST_FUNC_EXPR(D5, CTRL_LOW_PRIO, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(7), 1));
+AST_FUNC_EXPR(D5, "MDIO2", CTRL_HIGH_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
+AST_FUNC_EXPR(D5, "TIMER8", CTRL_LOW_PRIO,
+	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(7), 1));
 AST_PIN_MF(D5);
 
-AST_PIN_SF(J21, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(8), 1));
-AST_PIN_SF(J20, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(9), 1));
-AST_PIN_SF(H18, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(10), 1));
-AST_PIN_SF(F18, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(11), 1));
+AST_PIN_SF(J21, "SALT1", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(8), 1));
+AST_PIN_SF(J20, "SALT2", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(9), 1));
+AST_PIN_SF(H18, "SALT3", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(10), 1));
+AST_PIN_SF(F18, "SALT4", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(11), 1));
 
-AST_PIN_SF_OP(E19, func_expr_or,
+AST_PIN_SF_OP(E19, "LPCRST#", func_expr_or,
 	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(12), 1),
 		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(14), 1));
 
 /* H19: Need magic for SIORD30
-AST_FUNC_EXPR_OP(H19, CTRL_HIGH_PRIO, AND_EXPR(
+AST_FUNC_EXPR_OP(H19, "LPCPD#", CTRL_HIGH_PRIO,
+		func_expr_and,
 	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
-		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1)));
-AST_FUNC_EXPR_OP(H19, CTRL_LOW_PRIO, AND_EXPR(
+		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
+AST_FUNC_EXPR_OP(H19, "LPCSMI#", CTRL_LOW_PRIO,
+		func_expr_and,
 	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
-		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1)));
+		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
 AST_PIN_MF(H19);
 */
 
-AST_PIN_SF(H20, AST_CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
+AST_PIN_SF(H20, "LPCPME#", AST_CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
 
-AST_FUNC_EXPR_OP(E18, CTRL_HIGH_PRIO, func_expr_and,
+AST_FUNC_EXPR_OP(E18, "EXTRST#", CTRL_HIGH_PRIO,
+	       	func_expr_and,
 	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
 		AST_CTRL_DESC_EQ(SCU90, BIT_MASK(31), 0),
 		AST_CTRL_DESC_EQ(SCU3C, BIT_MASK(3), 1));
-AST_FUNC_EXPR_OP(E18, CTRL_LOW_PRIO, func_expr_and,
+AST_FUNC_EXPR_OP(E18, "SPICS1#", CTRL_LOW_PRIO,
+	       	func_expr_and,
 	       	AST_CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
 		AST_CTRL_DESC_EQ(SCU90, BIT_MASK(31), 1));
 AST_PIN_MF(E18);
 
-AST_FUNC_EXPR(A18, CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
-AST_FUNC_EXPR_OP(A18, CTRL_LOW_PRIO, func_expr_or,
+AST_FUNC_EXPR(A18, "SD2CLK", CTRL_HIGH_PRIO, AST_CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
+AST_FUNC_EXPR_OP(A18, "GPID0(In)", CTRL_LOW_PRIO,
+	       	func_expr_or,
 	       	AST_CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		AST_CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
 AST_PIN_MF(A18);
