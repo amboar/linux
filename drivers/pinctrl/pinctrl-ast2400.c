@@ -142,15 +142,15 @@ struct pin_func_prio {
 #define SF_PIN_OP_(_ball, _fallback, _name, _prio, _op, ...) \
 	CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
 	FUNC_EXPR_OP_(_ball, _name, _prio, _op); \
-	MF_PIN_(_ball, _fallback, &FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), NULL)
+	MF_PIN_(_ball, _fallback, &FUNC_EXPR_SYM(_ball, HIGH_PRIO), NULL)
 
 #define SF_PIN_OP__(_ball, _fallback, _name, _prio, _op, ...) \
 	SF_PIN_OP_(_ball, _fallback, _name, _prio, _op, __VA_ARGS__)
 
 /* The non-internal macros */
 
-#define CTRL_HIGH_PRIO high
-#define CTRL_LOW_PRIO low
+#define HIGH_PRIO high
+#define LOW_PRIO low
 
 /* Initialise a pin control descriptor. */
 #define CTRL_DESC(_op, _reg, _mask, _val) \
@@ -174,17 +174,17 @@ struct pin_func_prio {
 	FUNC_EXPR_OP_(_ball, _name, _prio, NULL)
 
 /* Multi-function pin, i.e. has both high and low priority pin functions. Need
- * to invoke FUNC_EXPR() or FUNC_EXPR_OP() for both CTRL_HIGH_PRIO and
- * CTRL_LOW_PRIO to define the expressions before invoking MF_PIN().
+ * to invoke FUNC_EXPR() or FUNC_EXPR_OP() for both HIGH_PRIO and
+ * LOW_PRIO to define the expressions before invoking MF_PIN().
  * Failure to do so will give a compilation error. */
 #define MF_PIN(_ball, _fallback) \
 	MF_PIN_(_ball, _fallback, \
-		       	&FUNC_EXPR_SYM(_ball, CTRL_HIGH_PRIO), \
-		       	&FUNC_EXPR_SYM(_ball, CTRL_LOW_PRIO))
+		       	&FUNC_EXPR_SYM(_ball, HIGH_PRIO), \
+		       	&FUNC_EXPR_SYM(_ball, LOW_PRIO))
 
 /* Single function pin, enabled by a multi-element pin expression */
 #define SF_PIN_OP(_ball, _fallback, _name, _op, ...) \
-	SF_PIN_OP__(_ball, _fallback, _name, CTRL_HIGH_PRIO, _op, __VA_ARGS__)
+	SF_PIN_OP__(_ball, _fallback, _name, HIGH_PRIO, _op, __VA_ARGS__)
 
 /* Single function pin, enabled by a simple pin description */
 #define SF_PIN(_ball, _fallback, _name, ...) \
@@ -206,20 +206,20 @@ SF_PIN(B5, "GPIOA1", "MAC2LINK", CTRL_DESC_EQ(SCU80, BIT_MASK(1), 1));
 SF_PIN(A4, "GPIOA2", "TIMER3", CTRL_DESC_EQ(SCU80, BIT_MASK(2), 1));
 SF_PIN(E6, "GPIOA3", "TIMER4", CTRL_DESC_EQ(SCU80, BIT_MASK(3), 1));
 
-FUNC_EXPR(C5, "SCL9", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
-FUNC_EXPR(C5, "TIMER5", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
+FUNC_EXPR(C5, "SCL9", HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
+FUNC_EXPR(C5, "TIMER5", LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(4), 1));
 MF_PIN(C5, "GPIOA4");
 
-FUNC_EXPR(B4, "SDA9", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
-FUNC_EXPR(B4, "TIMER6", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(5), 1));
+FUNC_EXPR(B4, "SDA9", HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(22), 1));
+FUNC_EXPR(B4, "TIMER6", LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(5), 1));
 MF_PIN(B4, "GPIOA5");
 
-FUNC_EXPR(A3, "MDC2", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
-FUNC_EXPR(A3, "TIMER7", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(6), 1));
+FUNC_EXPR(A3, "MDC2", HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
+FUNC_EXPR(A3, "TIMER7", LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(6), 1));
 MF_PIN(A3, "GPIOA6");
 
-FUNC_EXPR(D5, "MDIO2", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
-FUNC_EXPR(D5, "TIMER8", CTRL_LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(7), 1));
+FUNC_EXPR(D5, "MDIO2", HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(2), 1));
+FUNC_EXPR(D5, "TIMER8", LOW_PRIO, CTRL_DESC_EQ(SCU80, BIT_MASK(7), 1));
 MF_PIN(D5, "GPIOA7");
 
 SF_PIN(J21, "GPIOB0", "SALT1", CTRL_DESC_EQ(SCU80, BIT_MASK(8), 1));
@@ -232,11 +232,11 @@ SF_PIN_OP(E19, "GPIOB4", "LPCRST#", func_expr_or,
 		CTRL_DESC_EQ(STRAP, BIT_MASK(14), 1));
 
 /* H19: Need magic for SIORD30
-FUNC_EXPR_OP(H19, "LPCPD#", CTRL_HIGH_PRIO,
+FUNC_EXPR_OP(H19, "LPCPD#", HIGH_PRIO,
 		func_expr_and,
 	       	CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
-FUNC_EXPR_OP(H19, "LPCSMI#", CTRL_LOW_PRIO,
+FUNC_EXPR_OP(H19, "LPCSMI#", LOW_PRIO,
 		func_expr_and,
 	       	CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
@@ -245,19 +245,19 @@ MF_PIN(H19, "GPIOB5");
 
 SF_PIN(H20, "GPIOB6", "LPCPME#", CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
 
-FUNC_EXPR_OP(E18, "EXTRST#", CTRL_HIGH_PRIO,
+FUNC_EXPR_OP(E18, "EXTRST#", HIGH_PRIO,
 	       	func_expr_and,
 	       	CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
 		CTRL_DESC_EQ(SCU90, BIT_MASK(31), 0),
 		CTRL_DESC_EQ(SCU3C, BIT_MASK(3), 1));
-FUNC_EXPR_OP(E18, "SPICS1#", CTRL_LOW_PRIO,
+FUNC_EXPR_OP(E18, "SPICS1#", LOW_PRIO,
 	       	func_expr_and,
 	       	CTRL_DESC_EQ(SCU80, BIT_MASK(15), 1),
 		CTRL_DESC_EQ(SCU90, BIT_MASK(31), 1));
 MF_PIN(E18, "GPIOB7");
 
-FUNC_EXPR(A18, "SD2CLK", CTRL_HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
-FUNC_EXPR_OP(A18, "GPID0(In)", CTRL_LOW_PRIO,
+FUNC_EXPR(A18, "SD2CLK", HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
+FUNC_EXPR_OP(A18, "GPID0(In)", LOW_PRIO,
 	       	func_expr_or,
 	       	CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
