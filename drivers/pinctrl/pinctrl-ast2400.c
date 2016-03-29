@@ -119,6 +119,9 @@ struct ast_pinctrl_desc {
 	static struct ast_pinctrl_desc AST_BALL_SYM(_ball) = \
 		{ .high = _high, .low = _low, }
 
+/* Multi-function pin. Need to invoke AST_PIN_EXPR_OP() for CTRL_HIGH_PRIO and
+ * CTRL_LOW_PRIO before invoking AST_PIN_MF() for the required symbols to be
+ * defined. Failure to do so will give a compilation error. */
 #define AST_PIN_MF(_ball) \
 	AST_PIN_MF_(_ball, &AST_PIN_EXPR_SYM(_ball, CTRL_HIGH_PRIO), \
 		       	&AST_PIN_EXPR_SYM(_ball, CTRL_LOW_PRIO))
@@ -133,6 +136,7 @@ struct ast_pinctrl_desc {
 #define AST_PIN_SF_OP(_ball, _op, ...) \
 	AST_PIN_SF_OP__(_ball, CTRL_HIGH_PRIO, _op, __VA_ARGS__)
 
+/* Single function, single expression pin */
 #define AST_PIN_SF(_ball, ...) \
 	AST_PIN_SF_OP(_ball, NULL, __VA_ARGS__)
 
