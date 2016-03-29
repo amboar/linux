@@ -47,63 +47,63 @@
  * what's required to implement the AST2400 pinctrl: They cannot be arbitrarily
  * compounded.  Instead, multiple descriptions can be chained with one type of
  * logical operator (func_expr_and, func_expr_or).  A pin's high and low
- * priority expressions are then captured in a ast_func_prio struct, and a
+ * priority expressions are then captured in a pin_func_prio struct, and a
  * pointer to this is tucked into the pin's pinctrl subsystem registration.
  */
 
-struct ast_ctrl_desc {
-	bool (*op)(void __iomem *, struct ast_ctrl_desc *);
+struct pin_ctrl_desc {
+	bool (*op)(void __iomem *, struct pin_ctrl_desc *);
 	unsigned reg;
 	uint32_t mask;
 	uint32_t val;
 };
 
-static bool pin_desc_eq(void __iomem *base, struct ast_ctrl_desc *desc)
+static bool pin_desc_eq(void __iomem *base, struct pin_ctrl_desc *desc)
 {
 	uint32_t val = ioread32(base + desc->reg) & desc->mask;
 	return val == desc->val;
 }
 
-static bool pin_desc_neq(void __iomem *base, struct ast_ctrl_desc *desc)
+static bool pin_desc_neq(void __iomem *base, struct pin_ctrl_desc *desc)
 {
 	return !pin_desc_eq(base, desc);
 }
 
-struct ast_func_expr {
+struct pin_func_expr {
 	const char *name;
 	int ndescs;
-	struct ast_ctrl_desc *descs;
-	bool (*op)(void __iomem *, struct ast_func_expr *);
+	struct pin_ctrl_desc *descs;
+	bool (*op)(void __iomem *, struct pin_func_expr *);
 };
 
-static bool func_expr_and(void __iomem *base, struct ast_func_expr *expr)
+static bool func_expr_and(void __iomem *base, struct pin_func_expr *expr)
 {
 	bool ret = true;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
-		struct ast_ctrl_desc *desc = &expr->descs[i];
+		struct pin_ctrl_desc *desc = &expr->descs[i];
 		ret &= desc->op(base, desc);
 	}
 	return ret;
 }
 
-static bool func_expr_or(void  __iomem *base, struct ast_func_expr *expr)
+static bool func_expr_or(void  __iomem *base, struct pin_func_expr *expr)
 {
 	bool ret = false;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
-		struct ast_ctrl_desc *desc = &expr->descs[i];
+		struct pin_ctrl_desc *desc = &expr->descs[i];
 		ret |= desc->op(base, desc);
 	}
 	return ret;
 }
 
-struct ast_func_prio {
+struct pin_func_prio {
 	const char *ball;
-	struct ast_func_expr *high;
-	struct ast_func_expr *low;
+	struct pin_func_expr *high;
+	struct pin_func_expr *low;
 };
 
 /* Macro hell, better to see how they're used and work backwards */
@@ -113,14 +113,14 @@ struct ast_func_prio {
 #define AST_CTRL_DESC_SYM(_ball, _prio) ctrl_desc_##_ball##_##_prio
 
 #define AST_CTRL_DESC_(_ball, _prio, ...) \
-	static struct ast_ctrl_desc AST_CTRL_DESC_SYM(_ball, _prio)[] = \
+	static struct pin_ctrl_desc AST_CTRL_DESC_SYM(_ball, _prio)[] = \
 		{ __VA_ARGS__ }
 
 #define AST_FUNC_EXPR_SYM__(_ball, _prio) pin_expr_##_ball##_##_prio
 #define AST_FUNC_EXPR_SYM(_ball, _prio) AST_FUNC_EXPR_SYM__(_ball, _prio)
 
 #define AST_FUNC_EXPR_OP_(_ball, _name, _prio, _op) \
-	static struct ast_func_expr AST_FUNC_EXPR_SYM(_ball, _prio) = { \
+	static struct pin_func_expr AST_FUNC_EXPR_SYM(_ball, _prio) = { \
 		.name = _name, \
 		.op = _op, \
 		.ndescs = ARRAY_SIZE(AST_CTRL_DESC_SYM(_ball, _prio)), \
@@ -131,7 +131,7 @@ struct ast_func_prio {
 #define AST_BALL_SYM(_ball) AST_BALL_SYM__(_ball)
 
 #define AST_PIN_MF_(_ball, _high, _low) \
-	static struct ast_func_prio AST_BALL_SYM(_ball) = \
+	static struct pin_func_prio AST_BALL_SYM(_ball) = \
 		{ .ball = #_ball, .high = _high, .low = _low, }
 
 #define AST_PIN_SF_OP_(_ball, _name, _prio, _op, ...) \
