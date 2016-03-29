@@ -39,7 +39,7 @@
  * definitions in data sheet.
  *
  * The approach is to divide the problem roughly in two, into pin control
- * descriptors and pin function expressions which are tied together in a
+ * descriptors and pin function expressions, which are tied together in a
  * struct capturing the function priorities.  A pin control descriptor tells
  * the driver where and how to extract a value and what the expected value
  * should be (or not be). Multiple pin control descriptors can be combined
@@ -101,7 +101,6 @@ static bool func_expr_or(void  __iomem *base, struct pin_func_expr *expr)
 }
 
 struct pin_func_prio {
-	const char *ball;
 	const char *fallback;
 	struct pin_func_expr *high;
 	struct pin_func_expr *low;
@@ -133,7 +132,6 @@ struct pin_func_prio {
 
 #define MF_PIN_(_ball, _fallback, _high, _low) \
 	static struct pin_func_prio BALL_SYM(_ball) = { \
-		.ball = #_ball, \
 		.fallback = _fallback, \
 		.high = _high, \
 		.low = _low, \
@@ -164,7 +162,6 @@ struct pin_func_prio {
 #define CTRL_DESC_NEQ(_reg, _mask, _val) \
 	CTRL_DESC(pin_desc_neq, _reg, _mask, _val)
 
-
 #define PRIO_FUNC_EXPR(_ball, _name, _prio, _op, ...) \
 	CTRL_DESC_(_ball, _prio, __VA_ARGS__); \
 	PRIO_FUNC_EXPR_(_ball, _name, _prio, _op)
@@ -182,13 +179,16 @@ struct pin_func_prio {
 		       	&PRIO_FUNC_SYM(_ball, HIGH_PRIO), \
 		       	&PRIO_FUNC_SYM(_ball, LOW_PRIO))
 
-/* Single function pin, enabled by a multi-element pin expression */
+/* Single function pin, enabled by a multi-descriptor pin expression */
 #define SF_PIN_EXPR(_ball, _fallback, _name, _op, ...) \
 	SF_PIN_EXPR__(_ball, _fallback, _name, HIGH_PRIO, _op, __VA_ARGS__)
 
-/* Single function pin, enabled by a simple pin description */
+/* Single function pin, enabled by a single pin descriptor */
 #define SF_PIN(_ball, _fallback, _name, ...) \
 	SF_PIN_EXPR(_ball, _fallback, _name, NULL, __VA_ARGS__)
+
+#define AST_PINCTRL_PIN(_number, _name) \
+	{ .number = _number, .name = #_name, .drv_data = &(BALL_SYM(_name)) }
 
 #define SCU3C 0x3C
 #define SCU3C 0x3C
@@ -242,6 +242,7 @@ PRIO_FUNC_EXPR(H19, "LPCSMI#", LOW_PRIO,
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
 MF_PIN(H19, "GPIOB5");
 */
+MF_PIN_(H19, "GPIOB5", NULL, NULL);
 
 SF_PIN(H20, "GPIOB6", "LPCPME#", CTRL_DESC_EQ(SCU80, BIT_MASK(14), 1));
 
@@ -256,12 +257,14 @@ PRIO_FUNC_EXPR(E18, "SPICS1#", LOW_PRIO,
 		CTRL_DESC_EQ(SCU90, BIT_MASK(31), 1));
 MF_PIN(E18, "GPIOB7");
 
+/*
 PRIO_FUNC(A18, "SD2CLK", HIGH_PRIO, CTRL_DESC_EQ(SCU90, BIT_MASK(1), 1));
 PRIO_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
 	       	func_expr_or,
 	       	CTRL_DESC_EQ(SCU8C, BIT_MASK(1), 1),
 		CTRL_DESC_EQ(STRAP, BIT_MASK(21), 1));
 MF_PIN(A18, "GPIOD0");
+*/
 
 struct ast2400_pin_function {
 	const char *name;
@@ -270,7 +273,22 @@ struct ast2400_pin_function {
 };
 
 static const struct pinctrl_pin_desc ast2400_pinctrl_pins[] = {
-
+	AST_PINCTRL_PIN(0, D6),
+	AST_PINCTRL_PIN(1, B5),
+	AST_PINCTRL_PIN(2, A4),
+	AST_PINCTRL_PIN(3, E6),
+	AST_PINCTRL_PIN(4, C5),
+	AST_PINCTRL_PIN(5, B4),
+	AST_PINCTRL_PIN(6, A3),
+	AST_PINCTRL_PIN(7, D5),
+	AST_PINCTRL_PIN(8, J21),
+	AST_PINCTRL_PIN(9, J20),
+	AST_PINCTRL_PIN(10, H18),
+	AST_PINCTRL_PIN(11, F18),
+	AST_PINCTRL_PIN(12, E19),
+	AST_PINCTRL_PIN(13, H19),
+	AST_PINCTRL_PIN(14, H20),
+	AST_PINCTRL_PIN(15, E18)
 };
 
 struct ast2400_pinctrl_data {
@@ -292,11 +310,37 @@ static struct ast2400_pinctrl_data ast2400_pinctrl = {
 	*/
 };
 
+static int ast2400_pinctrl_get_groups_count(struct pinctrl_dev *pctldev)
+{
+	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
 
+	return pdata->npins;
+}
+
+static const char *ast2400_pinctrl_get_group_name(struct pinctrl_dev *pctldev,
+	       					  unsigned group)
+{
+	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
+
+	return pdata->pins[group].name;
+}
+
+static const int ast2400_pinctrl_get_group_pins(struct pinctrl_dev *pctldev,
+					        unsigned group,
+					        const unsigned **pins,
+					        unsigned *num_pins)
+{
+	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
+
+	*pins = &pdata->pins[group].number;
+	*num_pins = 1;
+
+	return 0;
+}
 
 static struct pinctrl_ops ast2400_pinctrl_ops = {
-	.get_groups_count = NULL,
-	.get_group_name = NULL,
+	.get_groups_count = ast2400_pinctrl_get_groups_count,
+	.get_group_name = ast2400_pinctrl_get_group_name,
 	.get_group_pins = NULL,
 	.pin_dbg_show = NULL,
 	.dt_node_to_map = NULL,
