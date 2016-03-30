@@ -54,16 +54,17 @@
  */
 
 struct pin_ctrl_desc {
-	bool (*op)(void __iomem *, struct pin_ctrl_desc *);
+	bool (*eval)(void __iomem *, struct pin_ctrl_desc *);
 	unsigned reg;
 	u32 mask;
-	u32 val;
+	u32 enable;
+	u32 disable;
 };
 
 static bool pin_desc_eq(void __iomem *base, struct pin_ctrl_desc *desc)
 {
 	u32 val = ioread32(base + desc->reg) & desc->mask;
-	return val == desc->val;
+	return val == desc->enable;
 }
 
 static bool pin_desc_neq(void __iomem *base, struct pin_ctrl_desc *desc)
@@ -75,29 +76,31 @@ struct pin_func_expr {
 	const char *name;
 	int ndescs;
 	struct pin_ctrl_desc *descs;
-	bool (*op)(void __iomem *, struct pin_func_expr *);
+	bool (*eval)(void __iomem *, struct pin_func_expr *);
+	int (*enable)(void __iomem *, struct pin_func_expr *);
+	int (*disable)(void __iomem *, struct pin_func_expr *);
 };
 
-static bool func_expr_and(void __iomem *base, struct pin_func_expr *expr)
+static int func_expr_and(void __iomem *base, struct pin_func_expr *expr)
 {
-	bool ret = true;
+	int ret = 1;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
 		struct pin_ctrl_desc *desc = &expr->descs[i];
-		ret &= desc->op(base, desc);
+		ret &= desc->eval(base, desc);
 	}
 	return ret;
 }
 
-static bool func_expr_or(void  __iomem *base, struct pin_func_expr *expr)
+static int func_expr_or(void  __iomem *base, struct pin_func_expr *expr)
 {
-	bool ret = false;
+	int ret = 0;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
 		struct pin_ctrl_desc *desc = &expr->descs[i];
-		ret |= desc->op(base, desc);
+		ret |= desc->eval(base, desc);
 	}
 	return ret;
 }
@@ -124,7 +127,7 @@ struct pin_func_prio {
 #define PRIO_FUNC_EXPR_(_ball, _name, _prio, _op) \
 	static struct pin_func_expr PRIO_FUNC_SYM(_ball, _prio) = { \
 		.name = #_name, \
-		.op = _op, \
+		.eval = _op, \
 		.ndescs = ARRAY_SIZE(CTRL_DESC_SYM(_ball, _prio)), \
 		.descs = &(CTRL_DESC_SYM(_ball, _prio))[0], \
 	}
@@ -154,7 +157,7 @@ struct pin_func_prio {
 
 /* Initialise a pin control descriptor. */
 #define CTRL_DESC(_op, _reg, _mask, _val) \
-	{ .op = _op, .reg = _reg, .mask = _mask, .val = _val }
+	{ .eval = _op, .reg = _reg, .mask = _mask, .val = _val }
 
 /* Initialise a pin control descriptor, checking for value equality */
 #define CTRL_DESC_EQ(_reg, _mask, _val) \
@@ -282,10 +285,9 @@ PRIO_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
 MF_PIN(A18, "GPIOD0");
 */
 
-#define EVAL_BALL(x) x
 #define AST_PINCTRL_PIN(_name) \
-	[EVAL_BALL(_name)] = { \
-		.number = EVAL_BALL(_name), \
+	[_name] = { \
+		.number = _name, \
 		.name = #_name, \
 		.drv_data = &(BALL_SYM(_name)) \
 	}
@@ -504,14 +506,14 @@ static struct pinctrl_ops ast2400_pinctrl_ops = {
 	.dt_free_map = pinctrl_utils_dt_free_map,
 };
 
-static int ast2400_pinctrl_get_fn_count(struct pinctrl_dev *pctldev)
+static int ast2400_pinmux_get_fn_count(struct pinctrl_dev *pctldev)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
 
 	return pdata->nfunctions;
 }
 
-static const char *ast2400_pinctrl_get_fn_name(struct pinctrl_dev *pctldev,
+static const char *ast2400_pinmux_get_fn_name(struct pinctrl_dev *pctldev,
 						unsigned function)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
@@ -519,7 +521,7 @@ static const char *ast2400_pinctrl_get_fn_name(struct pinctrl_dev *pctldev,
 	return pdata->functions[function].name;
 }
 
-static int ast2400_pinctrl_get_fn_groups(struct pinctrl_dev *pctldev,
+static int ast2400_pinmux_get_fn_groups(struct pinctrl_dev *pctldev,
 					  unsigned function,
 					  const char * const **groups,
 					  unsigned * const num_groups)
@@ -532,18 +534,60 @@ static int ast2400_pinctrl_get_fn_groups(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-static int ast2400_pinmux_set(struct pinctrl_dev *pctldev,
+static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 			      unsigned function,
 			      unsigned group)
 {
 	return -ENOTSUPP;
 }
 
+enum pin_prio { prio_fallback = 0, prio_low, prio_high }
+
+static bool eval_func_expr(void __iomem *base, struct pin_func_expr *expr)
+{
+	if (!(expr->ndescs && expr->descs)) {
+		return false;
+	}
+	if (expr->op) {
+		return expr->eval(base, expr);
+	}
+	return expr->descs->eval(base, expr->descs);
+}
+
+static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
+	       			  	  unsigned offset)
+{
+	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
+	struct pin_func_prio *prios = &pdata->pins[offset];
+
+	if (eval_func_expr(pdata->iomem, prios->high))
+		return prio_high;
+
+	if (eval_func_expr(pdata->iomem, prios->low))
+		return prio_low;
+
+	return prio_fallback;
+}
+
+static int ast2400_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
+{
+	return -((int) get_pin_prio(pctldev, offset));
+}
+
+static int ast2400_pinmux_free(struct pinctrl_dev *pctldev, unsigned offset)
+{
+	enum pin_prio prio = get_pin_prio(pctldev, offset);
+	return 0;
+}
+
 static struct pinmux_ops ast2400_pinmux_ops = {
-	.get_functions_count = ast2400_pinctrl_get_fn_count,
-	.get_function_name = ast2400_pinctrl_get_fn_name,
-	.get_function_groups = ast2400_pinctrl_get_fn_groups,
-	.set_mux = NULL,
+	.request = ast2400_pinmux_request,
+	.free = ast2400_pinmux_free,
+	.get_functions_count = ast2400_pinmux_get_fn_count,
+	.get_function_name = ast2400_pinmux_get_fn_name,
+	.get_function_groups = ast2400_pinmux_get_fn_groups,
+	.set_mux = ast2400_pinmux_set_mux,
+	.strict = true;
 };
 
 static struct pinconf_ops ast2400_pinconf_ops = {
