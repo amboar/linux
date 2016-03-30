@@ -57,14 +57,13 @@ struct pin_ctrl_desc {
 	bool (*eval)(void __iomem *, struct pin_ctrl_desc *);
 	unsigned reg;
 	u32 mask;
-	u32 enable;
-	u32 disable;
+	u32 val;
 };
 
 static bool pin_desc_eq(void __iomem *base, struct pin_ctrl_desc *desc)
 {
 	u32 val = ioread32(base + desc->reg) & desc->mask;
-	return val == desc->enable;
+	return val == desc->val;
 }
 
 static bool pin_desc_neq(void __iomem *base, struct pin_ctrl_desc *desc)
@@ -76,9 +75,7 @@ struct pin_func_expr {
 	const char *name;
 	int ndescs;
 	struct pin_ctrl_desc *descs;
-	bool (*eval)(void __iomem *, struct pin_func_expr *);
-	int (*enable)(void __iomem *, struct pin_func_expr *);
-	int (*disable)(void __iomem *, struct pin_func_expr *);
+	int (*eval)(void __iomem *, struct pin_func_expr *);
 };
 
 static int func_expr_and(void __iomem *base, struct pin_func_expr *expr)
@@ -541,14 +538,14 @@ static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 	return -ENOTSUPP;
 }
 
-enum pin_prio { prio_fallback = 0, prio_low, prio_high }
+enum pin_prio { prio_fallback = 0, prio_low, prio_high };
 
-static bool eval_func_expr(void __iomem *base, struct pin_func_expr *expr)
+static int eval_func_expr(void __iomem *base, struct pin_func_expr *expr)
 {
 	if (!(expr->ndescs && expr->descs)) {
 		return false;
 	}
-	if (expr->op) {
+	if (expr->eval) {
 		return expr->eval(base, expr);
 	}
 	return expr->descs->eval(base, expr->descs);
@@ -558,12 +555,12 @@ static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
 	       			  	  unsigned offset)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
-	struct pin_func_prio *prios = &pdata->pins[offset];
+	struct pin_func_prio *prios = pdata->pins[offset].drv_data;
 
-	if (eval_func_expr(pdata->iomem, prios->high))
+	if (eval_func_expr(pdata->reg_base, prios->high))
 		return prio_high;
 
-	if (eval_func_expr(pdata->iomem, prios->low))
+	if (eval_func_expr(pdata->reg_base, prios->low))
 		return prio_low;
 
 	return prio_fallback;
@@ -577,7 +574,7 @@ static int ast2400_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
 static int ast2400_pinmux_free(struct pinctrl_dev *pctldev, unsigned offset)
 {
 	enum pin_prio prio = get_pin_prio(pctldev, offset);
-	return 0;
+	return prio;
 }
 
 static struct pinmux_ops ast2400_pinmux_ops = {
@@ -587,7 +584,7 @@ static struct pinmux_ops ast2400_pinmux_ops = {
 	.get_function_name = ast2400_pinmux_get_fn_name,
 	.get_function_groups = ast2400_pinmux_get_fn_groups,
 	.set_mux = ast2400_pinmux_set_mux,
-	.strict = true;
+	.strict = true,
 };
 
 static struct pinconf_ops ast2400_pinconf_ops = {
