@@ -1,0 +1,101 @@
+Common bits: [(pd_t(reg='Strap', mask='19'), 4)]
+('GPIOF1', 'SIOPBI#'): {pd_t(reg='SCUA4', mask='12')} BMC_BATTERY_TEST
+('GPIOF2', 'SIOPWRGD'): {pd_t(reg='SCUA4', mask='13')} BMC_LOCK_N
+('GPIOF3', 'SIOPBO#'): {pd_t(reg='SCUA4', mask='14')} BATTERY_LOW_N
+('GPIOF5', 'SIOSCI#'): {pd_t(reg='SCUA4', mask='15')} AST_SYS_FAULT_N
+
+Common bits: [(pd_t(reg='SCU90', mask='6'), 8), (pd_t(reg='Strap', mask='4,1:0'), 8)]
+('GPIOH0', 'ROMD8'): set() PE_SLOT_TEST_EN_N
+('GPIOH1', 'ROMD9'): set() BMC_RTCRST_N
+('GPIOH2', 'ROMD10'): set() SYS_PWROK_BMC
+('GPIOH3', 'ROMD11'): set() BMC_MEM_HOT_N
+('GPIOH4', 'ROMD12'): set() BMC_SCM1_PROCHOT_N
+('GPIOH5', 'ROMD13'): set() STBY_PWR_LATCH
+('GPIOH6', 'ROMD14'): set() SCM1_FSI0_DATA_EN
+('GPIOH7', 'ROMD15'): set() BMC_TPM_INT_N
+
+Common bits: [(pd_t(reg='SCU80', mask='13'), 2), (pd_t(reg='SIORD_30', mask='1'), 2)]
+('GPIOB5', 'LPCSMI#'): set() SYS_PCIE_RST_N
+('GPIOB5', 'LPCPD#'): set() SYS_PCIE_RST_N
+
+Common bits: [(pd_t(reg='Strap', mask='22'), 8), (pd_t(reg='SCU8C', mask='12'), 2), (pd_t(reg='SCU8C', mask='13'), 2), (pd_t(reg='SCU8C', mask='14'), 2), (pd_t(reg='SCU8C', mask='15'), 2)]
+('GPIOE0', 'GPIE0(In)'): set() BMC_PWBTN_IN_N
+('GPIOE1', 'GPIE0(Out)'): set() BMC_PWRBTN_OUT_N
+('GPIOE2', 'GPIE2(In)'): set() BMC_RSTBTN_IN_N
+('GPIOE3', 'GPIE2(Out)'): set() BMC_RSTBTN_OUT_N
+('GPIOE4', 'GPIE4(In)'): set() BMC_NMIBTN_IN_N
+('GPIOE5', 'GPIE4(Out)'): set() 240VA_FLTA_N_12VP1A
+('GPIOE6', 'GPIE6(In)'): set() 240VA_FLTA_N_12VP1C
+('GPIOE7', 'GPIE6(Out)'): set() 240VA_FLTA_N_12VMA
+
+Common bits: [(pd_t(reg='Strap', mask='21'), 8), (pd_t(reg='SCU8C', mask='10'), 2), (pd_t(reg='SCU8C', mask='11'), 2), (pd_t(reg='SCU8C', mask='8'), 2), (pd_t(reg='SCU8C', mask='9'), 2)]
+('GPIOD0', 'GPID0(In)'): set() BMC_FSI_IN_ENA
+('GPIOD1', 'GPID0(Out)'): set() BMC_POWER_UP
+('GPIOD2', 'GPID2(In)'): set() SYS_PWROK
+('GPIOD3', 'GPID2(Out)'): set() SYS_PLTRST_B
+('GPIOD4', 'GPID4(In)'): set() BMC_INTRUDER_N
+('GPIOD5', 'GPID4(Out)'): set() PS_KILL
+('GPIOD6', 'GPID6(In)'): set() BMC_HDD_FAULT_P
+('GPIOD7', 'GPID6(Out)'): set() ATX_PWROK
+
+Common bits: [(pd_t(reg='SCU94', mask='1'), 4), (pd_t(reg='SCU88', mask='28'), 2), (pd_t(reg='SCU88', mask='29'), 2)]
+('GPIOR4', 'VPOR6'): set() BMC_HEARTBRAT_LED_N
+('GPIOR4', 'ROMA24'): set() BMC_HEARTBRAT_LED_N
+('GPIOR5', 'ROMA25'): set() BMC_PWR_LED_N
+('GPIOR5', 'VPOR7'): set() BMC_PWR_LED_N
+
+Common bits: [(pd_t(reg='SCU90', mask='5:4'), 23), (pd_t(reg='SCU84', mask='17'), 2), (pd_t(reg='SCU84', mask='18'), 2), (pd_t(reg='SCU84', mask='19'), 2), (pd_t(reg='SCU84', mask='20'), 2), (pd_t(reg='SCU84', mask='21'), 2), (pd_t(reg='SCU84', mask='22'), 2), (pd_t(reg='SCU84', mask='23'), 2), (pd_t(reg='SCU84', mask='24'), 2), (pd_t(reg='SCU84', mask='25'), 2), (pd_t(reg='SCU84', mask='26'), 2), (pd_t(reg='SCU84', mask='27'), 2), (pd_t(reg='SCU84', mask='28'), 2), (pd_t(reg='SCU84', mask='29'), 2), (pd_t(reg='SCU84', mask='30'), 2), (pd_t(reg='SCU84', mask='31'), 2), (pd_t(reg='SCU88', mask='0'), 2), (pd_t(reg='SCU88', mask='1'), 2), (pd_t(reg='SCU88', mask='2'), 2), (pd_t(reg='SCU88', mask='3'), 2), (pd_t(reg='SCU88', mask='4'), 2), (pd_t(reg='SCU88', mask='5'), 2), (pd_t(reg='SCU88', mask='6'), 2), (pd_t(reg='SCU88', mask='7'), 2)]
+('GPIOL1', 'VPIDE'): set()  BMC_COM1_DCD
+('GPIOL1', 'NDCD1'): set()  BMC_COM1_DCD
+('GPIOL2', 'VPIODD'): set() BMC_COM1_DSR
+('GPIOL2', 'NDSR1'): set()  BMC_COM1_DSR
+('GPIOL3', 'VPIHS'): set()  BMC_COM1_NRI
+('GPIOL3', 'NRI1'): set()   BMC_COM1_NRI
+('GPIOL4', 'VPIVS'): set()  BMC_COM1_DTR
+('GPIOL4', 'NDTR1'): set()  BMC_COM1_DTR
+('GPIOL5', 'NRTS1'): set()  BMC_COM1_RTS
+('GPIOL5', 'VPICLK'): set() BMC_COM1_RTS
+('GPIOL6', 'TXD1'): set()   BMC_COM1_TXD
+('GPIOL6', 'VPIB0'): set()  BMC_COM1_TXD
+('GPIOL7', 'VPIB1'): set()  BMC_COM1_RXD
+('GPIOL7', 'RXD1'): set()   BMC_COM1_RXD
+('GPIOM0', 'NCTS2'): set()  BMC_COM2_CTS
+('GPIOM0', 'VPIB2'): set()  BMC_COM2_CTS
+('GPIOM1', 'VPIB3'): set()  BMC_COM2_DCD
+('GPIOM1', 'NDCD2'): set()  BMC_COM2_DCD
+('GPIOM2', 'NDSR2'): set()  BMC_COM2_DSR
+('GPIOM2', 'VPIB4'): set()  BMC_COM2_DSR
+('GPIOM3', 'VPIB5'): set()  BMC_COM2_NRI
+('GPIOM3', 'NRI2'): set()   BMC_COM2_NRI
+('GPIOM4', 'VPIB6'): set()  BMC_COM2_DTR
+('GPIOM4', 'NDTR2'): set()  BMC_COM2_DTR
+('GPIOM5', 'VPIB7'): set()  BMC_COM2_RTS
+('GPIOM5', 'NRTS2'): set()  BMC_COM2_RTS
+('GPIOM6', 'VPIB8'): set()  BMC_COM2_TXD
+('GPIOM6', 'TXD2'): set()   BMC_COM2_TXD
+('GPIOM7', 'RXD2'): set()   BMC_COM2_RXD
+('GPIOM7', 'VPIB9'): set()  BMC_COM2_RXD
+('GPION0', 'VPIG0'): set()  BMC_PWM_CPU0
+('GPION0', 'PWM0'): set()   BMC_PWM_CPU0
+('GPION1', 'PWM1'): set()   BMC_PWM_SYS1
+('GPION1', 'VPIG1'): set()  BMC_PWM_SYS1
+('GPION2', 'VPIG2'): set()  BMC_PWM_SYS2
+('GPION2', 'PWM2'): set()   BMC_PWM_SYS2
+('GPION3', 'PWM3'): set()   BMC_PWM_SYS3
+('GPION3', 'VPIG3'): set()  BMC_PWM_SYS3
+('GPION4', 'PWM4'): set()   BMC_PWM_SYS4
+('GPION4', 'VPIG4'): set()  BMC_PWM_SYS4
+('GPION5', 'PWM5'): set()   BMC_PWM_SYS5
+('GPION5', 'VPIG5'): set()  BMC_PWM_SYS5
+('GPION6', 'VPIG6'): set()  BMC_PROCHOT_N_R
+('GPION6', 'PWM6'): set()   BMC_PROCHOT_N_R
+('GPION7', 'PWM7'): set()   BMC_BEEP
+('GPION7', 'VPIG7'): set()  BMC_BEEP
+
+Common bits: [(pd_t(reg='SCU3C', mask='3'), 2), (pd_t(reg='SCU80', mask='15'), 2), (pd_t(reg='SCU90', mask='31'), 2)]
+('GPIOB7', 'SPICS1#'): set() SPIVID_STBY_RESET_N
+('GPIOB7', 'EXTRST#'): set() SPIVID_STBY_RESET_N
+
+Common bits: [(pd_t(reg='SCU80', mask='12'), 1), (pd_t(reg='Strap', mask='14'), 1)]
+('GPIOB4', 'LPCRST#'): set() BMC_LPC_RST_N
+
