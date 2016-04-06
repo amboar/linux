@@ -166,9 +166,29 @@ def print_bits(bits):
     for k in sorted(bits.keys(), key=lambda x: len(bits[x]), reverse=True):
         print("{} ; {}".format(k, sorted(bits[k])))
 
+def get_mask_bits(mask):
+    print(mask)
+    if None is mask:
+        return set()
+    bits = []
+    if "," in mask:
+        for disjoint in mask.split(","):
+            sbits = get_mask_bits(disjoint)
+            print(sbits)
+            bits.extend(sbits)
+        return set(bits)
+    if ":" in mask:
+        r = [ int(x) for x in mask.split(":") ]
+        bits.extend(range(r[0], r[1] + 1))
+        return set(bits)
+    bits.append(int(mask))
+    return set(bits)
+
 def expr_uses_bit(expr, bit):
     if is_simple(expr):
-        return expr.a == bit
+        a = get_mask_bits(expr.a.mask)
+        b = get_mask_bits(bit.mask)
+        return set() != a.intersection(b) and expr.a.reg == bit.reg
     assert is_compound(expr)
     return expr_uses_bit(expr.a, bit) or expr_uses_bit(expr.b, bit)
 
