@@ -80,11 +80,11 @@ void write_sio_bits(void __iomem *base, unsigned offset, u32 val)
 }
 
 struct mux_desc {
-	bool (*eval)(void __iomem *, const struct mux_desc *);
 	const struct mux_reg *reg;
 	u32 mask;
 	u32 shift;
 	u32 val;
+	bool (*eval)(void __iomem *, const struct mux_desc *);
 };
 
 static bool mux_desc_eq(void __iomem *base, const struct mux_desc *desc)
@@ -100,9 +100,9 @@ static bool mux_desc_neq(void __iomem *base, const struct mux_desc *desc)
 
 struct mux_expr {
 	const char *name;
-	int (*eval)(void __iomem *, const struct mux_expr *);
 	int ndescs;
 	const struct mux_desc *descs;
+	int (*eval)(void __iomem *, const struct mux_expr *);
 };
 
 static int mux_expr_and(void __iomem *base, const struct mux_expr *expr)
@@ -127,6 +127,41 @@ static int mux_expr_or(void  __iomem *base, const struct mux_expr *expr)
 		ret = ret || desc->eval(base, desc);
 	}
 	return ret;
+}
+
+/* Cater for "unsupported" expressions with more specific functions. For
+ * example, mux_expr_gpioh() implements the following expression:
+ *
+ * SCU90[6]=1 || Strap[4,1:0]=100
+ *
+ * Really this expression means:
+ *
+ * SCU90[6]=1 || (Strap[4]=1 && Strap[1:0]=0)
+ */
+static int mux_expr_gpioh(void __iomem *base, const struct mux_expr *expr)
+{
+	const struct mux_desc *desc;
+	int ra, rb;
+
+	if (expr->ndescs != 3) {
+		/* write error and return */
+		return -1;
+	}
+
+	desc = &expr->descs[0];
+	ra = desc->eval(base, desc);
+	if (ra == 1) {
+		return 1;
+	} else if (ra == 0) {
+		desc = &expr->descs[1];
+		ra = desc->eval(base, desc);
+		desc = &expr->descs[2];
+		rb = desc->eval(base, desc);
+		if (ra == 1 && rb == 1) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 struct mux_prio {
