@@ -49,98 +49,108 @@
  * into a pin function expression. The expressions are limited in power to
  * what's required to implement the AST2400 pinctrl: They cannot be arbitrarily
  * compounded.  Instead, multiple descriptions can be chained with one type of
- * logical operator (func_expr_and, func_expr_or).  A pin's high and low
- * priority expressions are then captured in a pin_func_prio struct, and a
+ * logical operator (mux_expr_and, mux_expr_or).  A pin's high and low
+ * priority expressions are then captured in a mux_prio struct, and a
  * pointer to this is tucked into the pin's pinctrl subsystem registration.
  */
 
-struct pin_ctrl_desc_bits {
+struct mux_reg {
 	unsigned reg;
-	u32 mask;
-	int users;
-	u32 (*read)(void __iomem *, const struct pin_ctrl_desc_bits *);
-	void (*write)(void __iomem *, const struct pin_ctrl_desc_bits *, u32);
-	struct mutex lock;
+	u32 (*read)(void __iomem *, unsigned);
+	void (*write)(void __iomem *, unsigned, u32);
 };
 
-u32 read_pin_ctrl_desc_bits(void __iomem *base)
+u32 read_mmio_bits(void __iomem *base, unsigned offset)
+{
+	return ioread32(base + offset);
+}
+
+void write_mmio_bits(void __iomem *base, unsigned offset, u32 val)
+{
+	iowrite32(val, base + offset);
+}
+
+u32 read_sio_bits(void __iomem *base, unsigned offset)
+{
+	return 0;
+}
+
+void write_sio_bits(void __iomem *base, unsigned offset, u32 val)
 {
 }
 
-void write_pin_ctrl_desc_bits(void __iomem *base, u32 val)
-{
-}
-
-struct pin_ctrl_desc {
-	bool (*eval)(void __iomem *, const struct pin_ctrl_desc *);
-	struct pin_ctrl_desc_bits *bits;
+struct mux_desc {
+	bool (*eval)(void __iomem *, const struct mux_desc *);
+	const struct mux_reg *reg;
+	u32 mask;
+	u32 shift;
 	u32 val;
 };
 
-static bool pin_desc_eq(void __iomem *base, const struct pin_ctrl_desc *desc)
+static bool mux_desc_eq(void __iomem *base, const struct mux_desc *desc)
 {
-	u32 val = ioread32(base + desc->bits->reg) & desc->bits->mask;
-	return val == desc->val;
+	u32 raw = desc->reg->read(base, desc->reg->reg);
+	return ((raw & desc->mask) >> desc->shift) == desc->val;
 }
 
-static bool pin_desc_neq(void __iomem *base, const struct pin_ctrl_desc *desc)
+static bool mux_desc_neq(void __iomem *base, const struct mux_desc *desc)
 {
-	return !pin_desc_eq(base, desc);
+	return !mux_desc_eq(base, desc);
 }
 
-struct pin_func_expr {
+struct mux_expr {
 	const char *name;
-	int (*eval)(void __iomem *, const struct pin_func_expr *);
+	int (*eval)(void __iomem *, const struct mux_expr *);
 	int ndescs;
-	const struct pin_ctrl_desc *descs;
+	const struct mux_desc *descs;
 };
 
-static int func_expr_and(void __iomem *base, const struct pin_func_expr *expr)
+static int mux_expr_and(void __iomem *base, const struct mux_expr *expr)
 {
 	int ret = 1;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
-		const struct pin_ctrl_desc *desc = &expr->descs[i];
-		ret &= desc->eval(base, desc);
+		const struct mux_desc *desc = &expr->descs[i];
+		ret = ret && desc->eval(base, desc);
 	}
 	return ret;
 }
 
-static int func_expr_or(void  __iomem *base, const struct pin_func_expr *expr)
+static int mux_expr_or(void  __iomem *base, const struct mux_expr *expr)
 {
 	int ret = 0;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
-		const struct pin_ctrl_desc *desc = &expr->descs[i];
-		ret |= desc->eval(base, desc);
+		const struct mux_desc *desc = &expr->descs[i];
+		ret = ret || desc->eval(base, desc);
 	}
 	return ret;
 }
 
-struct pin_func_prio {
+struct mux_prio {
 	const char *fallback;
-	const struct pin_func_expr *high;
-	const struct pin_func_expr *low;
+	const struct mux_expr *high;
+	const struct mux_expr *low;
 };
 
 /* Macro hell, better to see how they're used and work backwards */
 
 /* "Internal" macros - consumed by other macros providing better abstractions */
 
-#define EXPR_DESCS_SYM__(_ball, _prio) expr_descs_##_ball##_##_prio
+#define EXPR_DESCS_SYM__(_ball, _prio) mux_descs_##_ball##_##_prio
 #define EXPR_DESCS_SYM(_ball, _prio) EXPR_DESCS_SYM__(_ball, _prio)
 
 #define EXPR_DESCS_(_ball, _prio, ...) \
-	static const struct pin_ctrl_desc EXPR_DESCS_SYM(_ball, _prio)[] = \
+	static const struct mux_desc EXPR_DESCS_SYM(_ball, _prio)[] = \
 		{ __VA_ARGS__ }
 
-#define PRIO_FUNC_SYM__(_ball, _prio) func_expr_##_ball##_##_prio
+#define PRIO_FUNC_SYM__(_ball, _prio) mux_expr_##_ball##_##_prio
 #define PRIO_FUNC_SYM(_ball, _prio) PRIO_FUNC_SYM__(_ball, _prio)
 
 #define PRIO_FUNC_EXPR_(_ball, _name, _prio, _op) \
-	static const struct pin_func_expr PRIO_FUNC_SYM(_ball, _prio) = { \
+	static const struct mux_expr PRIO_FUNC_SYM(_ball, _prio) = { \
 		.name = #_name, \
 		.eval = _op, \
 		.ndescs = ARRAY_SIZE(EXPR_DESCS_SYM(_ball, _prio)), \
@@ -151,7 +161,7 @@ struct pin_func_prio {
 #define BALL_SYM(_ball) BALL_SYM__(_ball)
 
 #define MF_PIN_(_ball, _fallback, _high, _low) \
-	static const struct pin_func_prio BALL_SYM(_ball) = { \
+	static const struct mux_prio BALL_SYM(_ball) = { \
 		.fallback = #_fallback, \
 		.high = _high, \
 		.low = _low, \
@@ -171,27 +181,36 @@ struct pin_func_prio {
 #define LOW_PRIO low
 
 /* Initialise a pin control descriptor. */
-#define CTRL_DESC_BITS_SYM(_reg, _idx) ctrl_desc_ ## _reg ## _ ## _idx
-#define CTRL_DESC_BITS(_reg, _idx) \
-	struct pin_ctrl_desc_bits CTRL_DESC_BITS_SYM(_reg, _idx) = { \
+#define MUX_REG_SYM(_reg) mux_reg_ ## _reg
+#define MUX_REG_MMIO(_reg) \
+	const struct mux_reg MUX_REG_SYM(_reg) = { \
 		.reg = _reg, \
-		.mask = BIT_MASK(_idx), \
-		.users = 0, \
+		.read = read_mmio_bits, \
+		.write = write_mmio_bits, \
+	}
+
+#define MUX_REG_SIO(_reg) \
+	const struct mux_reg MUX_REG_SYM(_reg) = { \
+		.reg = _reg, \
+		.read = read_sio_bits, \
+		.write = write_sio_bits, \
 	}
 
 #define CTRL_DESC(_op, _reg, _idx, _val) { \
 	.eval = _op, \
-	.bits = &CTRL_DESC_BITS_SYM(_reg, _idx), \
+	.reg = &MUX_REG_SYM(_reg), \
+	.mask = BIT_MASK(_idx), \
+	.shift = _idx, \
 	.val = _val \
 }
 
 /* Initialise a pin control descriptor, checking for value equality */
 #define CTRL_DESC_EQ(_reg, _idx, _val) \
-	CTRL_DESC(pin_desc_eq, _reg, _idx, _val)
+	CTRL_DESC(mux_desc_eq, _reg, _idx, _val)
 
 /* Initialise a pin control descriptor, checking for negated value equality */
 #define CTRL_DESC_NEQ(_reg, _idx, _val) \
-	CTRL_DESC(pin_desc_neq, _reg, _idx, _val)
+	CTRL_DESC(mux_desc_neq, _reg, _idx, _val)
 
 #define PRIO_FUNC_EXPR(_ball, _name, _prio, _op, ...) \
 	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
@@ -245,30 +264,14 @@ struct pin_func_prio {
 #define SCU8C 0x8C
 #define SCU90 0x90
 #define SCU94 0x94
+#define SIORD30 0x30
 
-CTRL_DESC_BITS(SCU3C, 3);
-CTRL_DESC_BITS(SCU80, 0);
-CTRL_DESC_BITS(SCU80, 1);
-CTRL_DESC_BITS(SCU80, 10);
-CTRL_DESC_BITS(SCU80, 11);
-CTRL_DESC_BITS(SCU80, 12);
-CTRL_DESC_BITS(SCU80, 14);
-CTRL_DESC_BITS(SCU80, 15);
-CTRL_DESC_BITS(SCU80, 2);
-CTRL_DESC_BITS(SCU80, 3);
-CTRL_DESC_BITS(SCU80, 4);
-CTRL_DESC_BITS(SCU80, 5);
-CTRL_DESC_BITS(SCU80, 6);
-CTRL_DESC_BITS(SCU80, 7);
-CTRL_DESC_BITS(SCU80, 8);
-CTRL_DESC_BITS(SCU80, 9);
-CTRL_DESC_BITS(SCU8C, 1);
-CTRL_DESC_BITS(SCU90, 1);
-CTRL_DESC_BITS(SCU90, 2);
-CTRL_DESC_BITS(SCU90, 22);
-CTRL_DESC_BITS(SCU90, 31);
-CTRL_DESC_BITS(STRAP, 14);
-CTRL_DESC_BITS(STRAP, 21);
+MUX_REG_MMIO(SCU3C);
+MUX_REG_MMIO(SCU80);
+MUX_REG_MMIO(SCU8C);
+MUX_REG_MMIO(SCU90);
+MUX_REG_MMIO(STRAP);
+MUX_REG_SIO(SIORD30);
 
 SF_PIN(D6, GPIOA0, MAC1LINK, CTRL_DESC_EQ(SCU80, 0, 1));
 SF_PIN(B5, GPIOA1, MAC2LINK, CTRL_DESC_EQ(SCU80, 1, 1));
@@ -296,32 +299,29 @@ SF_PIN(J20, GPIOB1, SALT2, CTRL_DESC_EQ(SCU80, 9, 1));
 SF_PIN(H18, GPIOB2, SALT3, CTRL_DESC_EQ(SCU80, 10, 1));
 SF_PIN(F18, GPIOB3, SALT4, CTRL_DESC_EQ(SCU80, 11, 1));
 
-SF_PIN_EXPR(E19, GPIOB4, LPCRST, func_expr_or,
+SF_PIN_EXPR(E19, GPIOB4, LPCRST, mux_expr_or,
 	       	CTRL_DESC_EQ(SCU80, 12, 1),
 		CTRL_DESC_EQ(STRAP, 14, 1));
 
-/* H19: Need magic for SIORD30
 PRIO_FUNC_EXPR(H19, LPCPD, HIGH_PRIO,
-		func_expr_and,
-	       	CTRL_DESC_EQ(SCU8C, 1, 1),
-		CTRL_DESC_EQ(STRAP, 21, 1));
+		mux_expr_and,
+	       	CTRL_DESC_EQ(SCU80, 13, 1),
+		CTRL_DESC_EQ(SIORD30, 1, 0));
 PRIO_FUNC_EXPR(H19, LPCSMI, LOW_PRIO,
-		func_expr_and,
-	       	CTRL_DESC_EQ(SCU8C, 1, 1),
-		CTRL_DESC_EQ(STRAP, 21, 1));
+		mux_expr_and,
+	       	CTRL_DESC_EQ(SCU80, 13, 1),
+		CTRL_DESC_EQ(SIORD30, 1, 1));
 MF_PIN(H19, GPIOB5);
-*/
-MF_PIN_(H19, GPIOB5, NULL, NULL);
 
 SF_PIN(H20, GPIOB6, LPCPME, CTRL_DESC_EQ(SCU80, 14, 1));
 
 PRIO_FUNC_EXPR(E18, EXTRST, HIGH_PRIO,
-	       	func_expr_and,
+	       	mux_expr_and,
 	       	CTRL_DESC_EQ(SCU80, 15, 1),
 		CTRL_DESC_EQ(SCU90, 31, 0),
 		CTRL_DESC_EQ(SCU3C, 3, 1));
 PRIO_FUNC_EXPR(E18, SPICS1, LOW_PRIO,
-	       	func_expr_and,
+	       	mux_expr_and,
 	       	CTRL_DESC_EQ(SCU80, 15, 1),
 		CTRL_DESC_EQ(SCU90, 31, 1));
 MF_PIN(E18, GPIOB7);
@@ -329,7 +329,7 @@ MF_PIN(E18, GPIOB7);
 /*
 PRIO_FUNC(A18, "SD2CLK", HIGH_PRIO, CTRL_DESC_EQ(SCU90, 1, 1));
 PRIO_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
-	       	func_expr_or,
+	       	mux_expr_or,
 	       	CTRL_DESC_EQ(SCU8C, 1, 1),
 		CTRL_DESC_EQ(STRAP, 21, 1));
 MF_PIN(A18, "GPIOD0");
@@ -593,7 +593,7 @@ static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 
 enum pin_prio { prio_fallback = 0, prio_low, prio_high };
 
-static int eval_func_expr(void __iomem *base, const struct pin_func_expr *expr)
+static int eval_mux_expr(void __iomem *base, const struct mux_expr *expr)
 {
 	if (!(expr->ndescs && expr->descs)) {
 		return false;
@@ -608,12 +608,12 @@ static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
 	       			  	  unsigned offset)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
-	struct pin_func_prio *prios = pdata->pins[offset].drv_data;
+	struct mux_prio *prios = pdata->pins[offset].drv_data;
 
-	if (eval_func_expr(pdata->reg_base, prios->high))
+	if (eval_mux_expr(pdata->reg_base, prios->high))
 		return prio_high;
 
-	if (eval_func_expr(pdata->reg_base, prios->low))
+	if (eval_mux_expr(pdata->reg_base, prios->low))
 		return prio_low;
 
 	return prio_fallback;
