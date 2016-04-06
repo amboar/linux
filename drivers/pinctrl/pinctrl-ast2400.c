@@ -130,7 +130,7 @@ static int mux_expr_or(void  __iomem *base, const struct mux_expr *expr)
 }
 
 struct mux_prio {
-	const char *fallback;
+	const char *other;
 	const struct mux_expr *high;
 	const struct mux_expr *low;
 };
@@ -160,20 +160,20 @@ struct mux_prio {
 #define PIN_SYM__(_ball) ball_##_ball
 #define PIN_SYM(_ball) PIN_SYM__(_ball)
 
-#define MF_PIN_(_ball, _fallback, _high, _low) \
+#define MF_PIN_(_ball, _other, _high, _low) \
 	static const struct mux_prio PIN_SYM(_ball) = { \
-		.fallback = #_fallback, \
+		.other = #_other, \
 		.high = _high, \
 		.low = _low, \
 	}
 
-#define SF_PIN_EXPR_(_ball, _fallback, _name, _prio, _op, ...) \
+#define SF_PIN_EXPR_(_ball, _other, _name, _prio, _op, ...) \
 	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
 	MUX_FUNC_EXPR_(_ball, _name, _prio, _op); \
-	MF_PIN_(_ball, _fallback, &MUX_FUNC_SYM(_ball, HIGH_PRIO), NULL)
+	MF_PIN_(_ball, _other, &MUX_FUNC_SYM(_ball, HIGH_PRIO), NULL)
 
-#define SF_PIN_EXPR__(_ball, _fallback, _name, _prio, _op, ...) \
-	SF_PIN_EXPR_(_ball, _fallback, _name, _prio, _op, __VA_ARGS__)
+#define SF_PIN_EXPR__(_ball, _other, _name, _prio, _op, ...) \
+	SF_PIN_EXPR_(_ball, _other, _name, _prio, _op, __VA_ARGS__)
 
 /* The non-internal macros */
 
@@ -224,18 +224,18 @@ struct mux_prio {
  * to invoke MUX_FUNC() or MUX_FUNC_EXPR() for both HIGH_PRIO and
  * LOW_PRIO to define the expressions before invoking MF_PIN().
  * Failure to do so will give a compilation error. */
-#define MF_PIN(_ball, _fallback) \
-	MF_PIN_(_ball, _fallback, \
+#define MF_PIN(_ball, _other) \
+	MF_PIN_(_ball, _other, \
 		       	&MUX_FUNC_SYM(_ball, HIGH_PRIO), \
 		       	&MUX_FUNC_SYM(_ball, LOW_PRIO))
 
 /* Single function pin, enabled by a multi-descriptor pin expression */
-#define SF_PIN_EXPR(_ball, _fallback, _name, _op, ...) \
-	SF_PIN_EXPR__(_ball, _fallback, _name, HIGH_PRIO, _op, __VA_ARGS__)
+#define SF_PIN_EXPR(_ball, _other, _name, _op, ...) \
+	SF_PIN_EXPR__(_ball, _other, _name, HIGH_PRIO, _op, __VA_ARGS__)
 
 /* Single function pin, enabled by a single pin descriptor */
-#define SF_PIN(_ball, _fallback, _name, ...) \
-	SF_PIN_EXPR(_ball, _fallback, _name, NULL, __VA_ARGS__)
+#define SF_PIN(_ball, _other, _name, ...) \
+	SF_PIN_EXPR(_ball, _other, _name, NULL, __VA_ARGS__)
 
 #define D6 0
 #define B5 1
@@ -591,7 +591,7 @@ static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 	return -ENOTSUPP;
 }
 
-enum pin_prio { prio_fallback = 0, prio_low, prio_high };
+enum pin_prio { prio_other = 0, prio_low, prio_high };
 
 static int eval_mux_expr(void __iomem *base, const struct mux_expr *expr)
 {
@@ -616,7 +616,7 @@ static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
 	if (eval_mux_expr(pdata->reg_base, prios->low))
 		return prio_low;
 
-	return prio_fallback;
+	return prio_other;
 }
 
 static int ast2400_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
