@@ -31,10 +31,10 @@
  *
  * 1. A "high" priority function
  * 2. A "low" priority function
- * 3. A default function
+ * 3. An "other" function, typically GPIO
  *
- * The functions are enabled by logic expressions over one or more bits in one
- * or more registers in the SCU, and some ports in the SuperIO controller.
+ * The functions are enabled by logic expressions over a number of bits in a
+ * number of registers in the SCU, and some ports in the SuperIO controller.
  *
  * This is all rather complex and tedious, so a number of structs, functions
  * and macros are defined. Together these help reduce the tedium and line noise
@@ -84,47 +84,49 @@ struct mux_desc {
 	u32 mask;
 	u32 shift;
 	u32 val;
-	bool (*eval)(void __iomem *, const struct mux_desc *);
+	bool (*eval)(const struct mux_desc *, void __iomem *);
 };
 
-static bool mux_desc_eq(void __iomem *base, const struct mux_desc *desc)
+static bool mux_desc_eq(const struct mux_desc *desc, void __iomem *base)
 {
 	u32 raw = desc->reg->read(base, desc->reg->reg);
 	return ((raw & desc->mask) >> desc->shift) == desc->val;
 }
 
-static bool mux_desc_neq(void __iomem *base, const struct mux_desc *desc)
+static bool mux_desc_neq(const struct mux_desc *desc, void __iomem *base)
 {
-	return !mux_desc_eq(base, desc);
+	return !mux_desc_eq(desc, base);
 }
 
 struct mux_expr {
 	const char *name;
 	int ndescs;
 	const struct mux_desc *descs;
-	int (*eval)(void __iomem *, const struct mux_expr *);
+	int (*eval)(const struct mux_expr *, void __iomem *);
+	int (*enable)(const struct mux_expr *, void __iomem *);
+	int (*disable)(const struct mux_expr *, void __iomem *);
 };
 
-static int mux_expr_and(void __iomem *base, const struct mux_expr *expr)
+static int mux_expr_and(const struct mux_expr *expr, void __iomem *base)
 {
 	int ret = 1;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
 		const struct mux_desc *desc = &expr->descs[i];
-		ret = ret && desc->eval(base, desc);
+		ret = ret && desc->eval(desc, base);
 	}
 	return ret;
 }
 
-static int mux_expr_or(void  __iomem *base, const struct mux_expr *expr)
+static int mux_expr_or(const struct mux_expr *expr, void  __iomem *base)
 {
 	int ret = 0;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
 		const struct mux_desc *desc = &expr->descs[i];
-		ret = ret || desc->eval(base, desc);
+		ret = ret || desc->eval(desc, base);
 	}
 	return ret;
 }
@@ -138,7 +140,7 @@ static int mux_expr_or(void  __iomem *base, const struct mux_expr *expr)
  *
  * SCU90[6]=1 || (Strap[4]=1 && Strap[1:0]=0)
  */
-static int mux_expr_gpioh(void __iomem *base, const struct mux_expr *expr)
+static int mux_expr_gpioh(const struct mux_expr *expr, void __iomem *base)
 {
 	const struct mux_desc *desc;
 	int ra, rb;
@@ -149,14 +151,14 @@ static int mux_expr_gpioh(void __iomem *base, const struct mux_expr *expr)
 	}
 
 	desc = &expr->descs[0];
-	ra = desc->eval(base, desc);
+	ra = desc->eval(desc, base);
 	if (ra == 1) {
 		return 1;
 	} else if (ra == 0) {
 		desc = &expr->descs[1];
-		ra = desc->eval(base, desc);
+		ra = desc->eval(desc, base);
 		desc = &expr->descs[2];
-		rb = desc->eval(base, desc);
+		rb = desc->eval(desc, base);
 		if (ra == 1 && rb == 1) {
 			return 1;
 		}
@@ -174,14 +176,14 @@ struct mux_prio {
 
 /* "Internal" macros - consumed by other macros providing better abstractions */
 
-#define EXPR_DESCS_SYM__(_ball, _prio) mux_descs_##_ball##_##_prio
+#define EXPR_DESCS_SYM__(_ball, _prio) mux_descs_ ## _ball ## _ ## _prio
 #define EXPR_DESCS_SYM(_ball, _prio) EXPR_DESCS_SYM__(_ball, _prio)
 
 #define EXPR_DESCS_(_ball, _prio, ...) \
 	static const struct mux_desc EXPR_DESCS_SYM(_ball, _prio)[] = \
 		{ __VA_ARGS__ }
 
-#define MUX_FUNC_SYM__(_ball, _prio) mux_expr_##_ball##_##_prio
+#define MUX_FUNC_SYM__(_ball, _prio) mux_expr_ ## _ball ## _ ## _prio
 #define MUX_FUNC_SYM(_ball, _prio) MUX_FUNC_SYM__(_ball, _prio)
 
 #define MUX_FUNC_EXPR_(_ball, _name, _prio, _op) \
@@ -192,7 +194,7 @@ struct mux_prio {
 		.descs = &(EXPR_DESCS_SYM(_ball, _prio))[0], \
 	}
 
-#define PIN_SYM__(_ball) ball_##_ball
+#define PIN_SYM__(_ball) ball_ ## _ball
 #define PIN_SYM(_ball) PIN_SYM__(_ball)
 
 #define MF_PIN_(_ball, _other, _high, _low) \
@@ -216,7 +218,7 @@ struct mux_prio {
 #define LOW_PRIO low
 
 /* Initialise a pin control descriptor. */
-#define MUX_REG_SYM(_reg) mux_reg_ ## _reg
+#define MUX_REG_SYM(_reg) mux_reg_  ##  _reg
 #define MUX_REG_MMIO(_reg) \
 	const struct mux_reg MUX_REG_SYM(_reg) = { \
 		.reg = _reg, \
@@ -396,7 +398,7 @@ static const struct pinctrl_pin_desc ast2400_pins[] = {
 	AST_PINCTRL_PIN(E18)
 };
 
-#define PIN_GROUP_SYM(_name) _name##_pins
+#define PIN_GROUP_SYM(_name) _name ## _pins
 #define PIN_GROUP_(_name, ...) \
 	static const int PIN_GROUP_SYM(_name)[] = { __VA_ARGS__ }
 #define PIN_GROUP(_name, ...) PIN_GROUP_(_name, __VA_ARGS__)
@@ -462,7 +464,7 @@ static const struct ast2400_pin_group ast2400_groups[] = {
 	AST_PINCTRL_GROUP(GPIOB),
 };
 
-#define FUNC_GROUP_SYM(_name) _name##_groups
+#define FUNC_GROUP_SYM(_name) _name ## _groups
 #define FUNC_GROUP(_name) \
 	static const char *const FUNC_GROUP_SYM(_name)[] = { #_name }
 
@@ -628,15 +630,15 @@ static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 
 enum pin_prio { prio_other = 0, prio_low, prio_high };
 
-static int eval_mux_expr(void __iomem *base, const struct mux_expr *expr)
+static int eval_mux_expr(const struct mux_expr *expr, void __iomem *base)
 {
 	if (!(expr->ndescs && expr->descs)) {
-		return false;
+		return -1;
 	}
 	if (expr->eval) {
-		return expr->eval(base, expr);
+		return expr->eval(expr, base);
 	}
-	return expr->descs->eval(base, expr->descs);
+	return expr->descs->eval(expr->descs, base);
 }
 
 static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
@@ -645,10 +647,10 @@ static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
 	struct mux_prio *prios = pdata->pins[offset].drv_data;
 
-	if (eval_mux_expr(pdata->reg_base, prios->high))
+	if (eval_mux_expr(prios->high, pdata->reg_base))
 		return prio_high;
 
-	if (eval_mux_expr(pdata->reg_base, prios->low))
+	if (eval_mux_expr(prios->low, pdata->reg_base))
 		return prio_low;
 
 	return prio_other;
@@ -662,6 +664,14 @@ static int ast2400_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
 static int ast2400_pinmux_free(struct pinctrl_dev *pctldev, unsigned offset)
 {
 	enum pin_prio prio = get_pin_prio(pctldev, offset);
+	switch (prio) {
+		case prio_high:
+			break;
+		case prio_low:
+			break;
+		case prio_other:
+			break;
+	}
 	return prio;
 }
 
