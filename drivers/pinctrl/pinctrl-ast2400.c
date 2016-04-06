@@ -146,22 +146,22 @@ struct mux_prio {
 	static const struct mux_desc EXPR_DESCS_SYM(_ball, _prio)[] = \
 		{ __VA_ARGS__ }
 
-#define PRIO_FUNC_SYM__(_ball, _prio) mux_expr_##_ball##_##_prio
-#define PRIO_FUNC_SYM(_ball, _prio) PRIO_FUNC_SYM__(_ball, _prio)
+#define MUX_FUNC_SYM__(_ball, _prio) mux_expr_##_ball##_##_prio
+#define MUX_FUNC_SYM(_ball, _prio) MUX_FUNC_SYM__(_ball, _prio)
 
-#define PRIO_FUNC_EXPR_(_ball, _name, _prio, _op) \
-	static const struct mux_expr PRIO_FUNC_SYM(_ball, _prio) = { \
+#define MUX_FUNC_EXPR_(_ball, _name, _prio, _op) \
+	static const struct mux_expr MUX_FUNC_SYM(_ball, _prio) = { \
 		.name = #_name, \
 		.eval = _op, \
 		.ndescs = ARRAY_SIZE(EXPR_DESCS_SYM(_ball, _prio)), \
 		.descs = &(EXPR_DESCS_SYM(_ball, _prio))[0], \
 	}
 
-#define BALL_SYM__(_ball) ball_##_ball
-#define BALL_SYM(_ball) BALL_SYM__(_ball)
+#define PIN_SYM__(_ball) ball_##_ball
+#define PIN_SYM(_ball) PIN_SYM__(_ball)
 
 #define MF_PIN_(_ball, _fallback, _high, _low) \
-	static const struct mux_prio BALL_SYM(_ball) = { \
+	static const struct mux_prio PIN_SYM(_ball) = { \
 		.fallback = #_fallback, \
 		.high = _high, \
 		.low = _low, \
@@ -169,8 +169,8 @@ struct mux_prio {
 
 #define SF_PIN_EXPR_(_ball, _fallback, _name, _prio, _op, ...) \
 	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
-	PRIO_FUNC_EXPR_(_ball, _name, _prio, _op); \
-	MF_PIN_(_ball, _fallback, &PRIO_FUNC_SYM(_ball, HIGH_PRIO), NULL)
+	MUX_FUNC_EXPR_(_ball, _name, _prio, _op); \
+	MF_PIN_(_ball, _fallback, &MUX_FUNC_SYM(_ball, HIGH_PRIO), NULL)
 
 #define SF_PIN_EXPR__(_ball, _fallback, _name, _prio, _op, ...) \
 	SF_PIN_EXPR_(_ball, _fallback, _name, _prio, _op, __VA_ARGS__)
@@ -196,7 +196,7 @@ struct mux_prio {
 		.write = write_sio_bits, \
 	}
 
-#define CTRL_DESC(_op, _reg, _idx, _val) { \
+#define MUX_DESC(_op, _reg, _idx, _val) { \
 	.eval = _op, \
 	.reg = &MUX_REG_SYM(_reg), \
 	.mask = BIT_MASK(_idx), \
@@ -205,29 +205,29 @@ struct mux_prio {
 }
 
 /* Initialise a pin control descriptor, checking for value equality */
-#define CTRL_DESC_EQ(_reg, _idx, _val) \
-	CTRL_DESC(mux_desc_eq, _reg, _idx, _val)
+#define MUX_DESC_EQ(_reg, _idx, _val) \
+	MUX_DESC(mux_desc_eq, _reg, _idx, _val)
 
 /* Initialise a pin control descriptor, checking for negated value equality */
-#define CTRL_DESC_NEQ(_reg, _idx, _val) \
-	CTRL_DESC(mux_desc_neq, _reg, _idx, _val)
+#define MUX_DESC_NEQ(_reg, _idx, _val) \
+	MUX_DESC(mux_desc_neq, _reg, _idx, _val)
 
-#define PRIO_FUNC_EXPR(_ball, _name, _prio, _op, ...) \
+#define MUX_FUNC_EXPR(_ball, _name, _prio, _op, ...) \
 	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
-	PRIO_FUNC_EXPR_(_ball, _name, _prio, _op)
+	MUX_FUNC_EXPR_(_ball, _name, _prio, _op)
 
-#define PRIO_FUNC(_ball, _name, _prio, ...) \
+#define MUX_FUNC(_ball, _name, _prio, ...) \
 	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
-	PRIO_FUNC_EXPR_(_ball, _name, _prio, NULL)
+	MUX_FUNC_EXPR_(_ball, _name, _prio, NULL)
 
 /* Multi-function pin, i.e. has both high and low priority pin functions. Need
- * to invoke PRIO_FUNC() or PRIO_FUNC_EXPR() for both HIGH_PRIO and
+ * to invoke MUX_FUNC() or MUX_FUNC_EXPR() for both HIGH_PRIO and
  * LOW_PRIO to define the expressions before invoking MF_PIN().
  * Failure to do so will give a compilation error. */
 #define MF_PIN(_ball, _fallback) \
 	MF_PIN_(_ball, _fallback, \
-		       	&PRIO_FUNC_SYM(_ball, HIGH_PRIO), \
-		       	&PRIO_FUNC_SYM(_ball, LOW_PRIO))
+		       	&MUX_FUNC_SYM(_ball, HIGH_PRIO), \
+		       	&MUX_FUNC_SYM(_ball, LOW_PRIO))
 
 /* Single function pin, enabled by a multi-descriptor pin expression */
 #define SF_PIN_EXPR(_ball, _fallback, _name, _op, ...) \
@@ -273,65 +273,65 @@ MUX_REG_MMIO(SCU90);
 MUX_REG_MMIO(STRAP);
 MUX_REG_SIO(SIORD30);
 
-SF_PIN(D6, GPIOA0, MAC1LINK, CTRL_DESC_EQ(SCU80, 0, 1));
-SF_PIN(B5, GPIOA1, MAC2LINK, CTRL_DESC_EQ(SCU80, 1, 1));
-SF_PIN(A4, GPIOA2, TIMER3, CTRL_DESC_EQ(SCU80, 2, 1));
-SF_PIN(E6, GPIOA3, TIMER4, CTRL_DESC_EQ(SCU80, 3, 1));
+SF_PIN(D6, GPIOA0, MAC1LINK, MUX_DESC_EQ(SCU80, 0, 1));
+SF_PIN(B5, GPIOA1, MAC2LINK, MUX_DESC_EQ(SCU80, 1, 1));
+SF_PIN(A4, GPIOA2, TIMER3, MUX_DESC_EQ(SCU80, 2, 1));
+SF_PIN(E6, GPIOA3, TIMER4, MUX_DESC_EQ(SCU80, 3, 1));
 
-PRIO_FUNC(C5, SCL9, HIGH_PRIO, CTRL_DESC_EQ(SCU90, 22, 1));
-PRIO_FUNC(C5, TIMER5, LOW_PRIO, CTRL_DESC_EQ(SCU80, 4, 1));
+MUX_FUNC(C5, SCL9, HIGH_PRIO, MUX_DESC_EQ(SCU90, 22, 1));
+MUX_FUNC(C5, TIMER5, LOW_PRIO, MUX_DESC_EQ(SCU80, 4, 1));
 MF_PIN(C5, GPIOA4);
 
-PRIO_FUNC(B4, SDA9, HIGH_PRIO, CTRL_DESC_EQ(SCU90, 22, 1));
-PRIO_FUNC(B4, TIMER6, LOW_PRIO, CTRL_DESC_EQ(SCU80, 5, 1));
+MUX_FUNC(B4, SDA9, HIGH_PRIO, MUX_DESC_EQ(SCU90, 22, 1));
+MUX_FUNC(B4, TIMER6, LOW_PRIO, MUX_DESC_EQ(SCU80, 5, 1));
 MF_PIN(B4, GPIOA5);
 
-PRIO_FUNC(A3, MDC2, HIGH_PRIO, CTRL_DESC_EQ(SCU90, 2, 1));
-PRIO_FUNC(A3, TIMER7, LOW_PRIO, CTRL_DESC_EQ(SCU80, 6, 1));
+MUX_FUNC(A3, MDC2, HIGH_PRIO, MUX_DESC_EQ(SCU90, 2, 1));
+MUX_FUNC(A3, TIMER7, LOW_PRIO, MUX_DESC_EQ(SCU80, 6, 1));
 MF_PIN(A3, GPIOA6);
 
-PRIO_FUNC(D5, MDIO2, HIGH_PRIO, CTRL_DESC_EQ(SCU90, 2, 1));
-PRIO_FUNC(D5, TIMER8, LOW_PRIO, CTRL_DESC_EQ(SCU80, 7, 1));
+MUX_FUNC(D5, MDIO2, HIGH_PRIO, MUX_DESC_EQ(SCU90, 2, 1));
+MUX_FUNC(D5, TIMER8, LOW_PRIO, MUX_DESC_EQ(SCU80, 7, 1));
 MF_PIN(D5, GPIOA7);
 
-SF_PIN(J21, GPIOB0, SALT1, CTRL_DESC_EQ(SCU80, 8, 1));
-SF_PIN(J20, GPIOB1, SALT2, CTRL_DESC_EQ(SCU80, 9, 1));
-SF_PIN(H18, GPIOB2, SALT3, CTRL_DESC_EQ(SCU80, 10, 1));
-SF_PIN(F18, GPIOB3, SALT4, CTRL_DESC_EQ(SCU80, 11, 1));
+SF_PIN(J21, GPIOB0, SALT1, MUX_DESC_EQ(SCU80, 8, 1));
+SF_PIN(J20, GPIOB1, SALT2, MUX_DESC_EQ(SCU80, 9, 1));
+SF_PIN(H18, GPIOB2, SALT3, MUX_DESC_EQ(SCU80, 10, 1));
+SF_PIN(F18, GPIOB3, SALT4, MUX_DESC_EQ(SCU80, 11, 1));
 
 SF_PIN_EXPR(E19, GPIOB4, LPCRST, mux_expr_or,
-	       	CTRL_DESC_EQ(SCU80, 12, 1),
-		CTRL_DESC_EQ(STRAP, 14, 1));
+	       	MUX_DESC_EQ(SCU80, 12, 1),
+		MUX_DESC_EQ(STRAP, 14, 1));
 
-PRIO_FUNC_EXPR(H19, LPCPD, HIGH_PRIO,
+MUX_FUNC_EXPR(H19, LPCPD, HIGH_PRIO,
 		mux_expr_and,
-	       	CTRL_DESC_EQ(SCU80, 13, 1),
-		CTRL_DESC_EQ(SIORD30, 1, 0));
-PRIO_FUNC_EXPR(H19, LPCSMI, LOW_PRIO,
+	       	MUX_DESC_EQ(SCU80, 13, 1),
+		MUX_DESC_EQ(SIORD30, 1, 0));
+MUX_FUNC_EXPR(H19, LPCSMI, LOW_PRIO,
 		mux_expr_and,
-	       	CTRL_DESC_EQ(SCU80, 13, 1),
-		CTRL_DESC_EQ(SIORD30, 1, 1));
+	       	MUX_DESC_EQ(SCU80, 13, 1),
+		MUX_DESC_EQ(SIORD30, 1, 1));
 MF_PIN(H19, GPIOB5);
 
-SF_PIN(H20, GPIOB6, LPCPME, CTRL_DESC_EQ(SCU80, 14, 1));
+SF_PIN(H20, GPIOB6, LPCPME, MUX_DESC_EQ(SCU80, 14, 1));
 
-PRIO_FUNC_EXPR(E18, EXTRST, HIGH_PRIO,
+MUX_FUNC_EXPR(E18, EXTRST, HIGH_PRIO,
 	       	mux_expr_and,
-	       	CTRL_DESC_EQ(SCU80, 15, 1),
-		CTRL_DESC_EQ(SCU90, 31, 0),
-		CTRL_DESC_EQ(SCU3C, 3, 1));
-PRIO_FUNC_EXPR(E18, SPICS1, LOW_PRIO,
+	       	MUX_DESC_EQ(SCU80, 15, 1),
+		MUX_DESC_EQ(SCU90, 31, 0),
+		MUX_DESC_EQ(SCU3C, 3, 1));
+MUX_FUNC_EXPR(E18, SPICS1, LOW_PRIO,
 	       	mux_expr_and,
-	       	CTRL_DESC_EQ(SCU80, 15, 1),
-		CTRL_DESC_EQ(SCU90, 31, 1));
+	       	MUX_DESC_EQ(SCU80, 15, 1),
+		MUX_DESC_EQ(SCU90, 31, 1));
 MF_PIN(E18, GPIOB7);
 
 /*
-PRIO_FUNC(A18, "SD2CLK", HIGH_PRIO, CTRL_DESC_EQ(SCU90, 1, 1));
-PRIO_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
+MUX_FUNC(A18, "SD2CLK", HIGH_PRIO, MUX_DESC_EQ(SCU90, 1, 1));
+MUX_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
 	       	mux_expr_or,
-	       	CTRL_DESC_EQ(SCU8C, 1, 1),
-		CTRL_DESC_EQ(STRAP, 21, 1));
+	       	MUX_DESC_EQ(SCU8C, 1, 1),
+		MUX_DESC_EQ(STRAP, 21, 1));
 MF_PIN(A18, "GPIOD0");
 */
 
@@ -339,7 +339,7 @@ MF_PIN(A18, "GPIOD0");
 	[_name] = { \
 		.number = _name, \
 		.name = #_name, \
-		.drv_data = (void *)&(BALL_SYM(_name)) \
+		.drv_data = (void *)&(PIN_SYM(_name)) \
 	}
 
 static const struct pinctrl_pin_desc ast2400_pins[] = {
