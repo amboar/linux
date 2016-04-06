@@ -223,7 +223,7 @@ def print_networks(nets):
         scommon = sorted(common, key=lambda x: x[0])
         scommon = sorted(scommon, key=lambda x: x[1], reverse=True)
         print("Common bits: {}".format(scommon))
-        defrels = [ (get_sig_pin(pins, sig).default, sig) for sig in rels ]
+        defrels = [ (get_sig_pin(pins, sig).other, sig) for sig in rels ]
         for default, sig in sorted(defrels, key=lambda x: x[0]):
             selbits = set(get_bits(sig.expr)).difference(relbits)
             print("('{}', '{}'): {}".format(default, sig.sig, selbits))
