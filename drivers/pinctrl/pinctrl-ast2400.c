@@ -748,49 +748,42 @@ static inline int maybe_disable(const struct mux_expr *expr, void __iomem *base)
 	return 1;
 }
 
-static inline bool maybe_match(const struct mux_expr *expr,
-	       	const char *const name, size_t n)
-{
-	if (expr) {
-		return strncmp(name, expr->name, n) == 0;
-	}
-	return false;
-}
-
 static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 			      unsigned function,
 			      unsigned group)
 {
 	int i;
+	int ret;
 	const struct ast2400_pinctrl_data *pdata =
 	       	pinctrl_dev_get_drvdata(pctldev);
 	const struct ast2400_pin_group *pgroup = &pdata->groups[group];
-	const char *const name = pdata->functions[function].name;
-	const size_t len = strlen(name);
+	const struct ast2400_pin_function *pfunc =
+	       	&pdata->functions[function];
+	const bool gpio = pfunc->nsignals == 0;
+
+	if (pfunc->nsignals > 0 && pfunc->nsignals != pgroup->npins) {
+		/* Print error */
+		return -1;
+	}
 
 	for (i = 0; i < pgroup->npins; i++) {
 		int pin = pgroup->pins[i];
 		const struct pinctrl_pin_desc *ppin = &pdata->pins[pin];
 		const struct mux_prio *pprio = ppin->drv_data;
 
-		/* Set requested mux */
-		if (strncmp(name, pprio->other, len) == 0) {
-			if (!maybe_disable(pprio->high, pdata->reg_base)) {
+		ret = maybe_disable(pprio->high, pdata->reg_base);
+		if (!ret && gpio)
+			return -1;
+
+		ret = maybe_disable(pprio->low, pdata->reg_base);
+		if (!ret && gpio)
+			return -1;
+
+		if (!gpio) {
+			const struct mux_expr *signal = pfunc->signals[i];
+			if (!signal->enable(signal, pdata->reg_base))
 				return -1;
-			}
-			if (!maybe_disable(pprio->low, pdata->reg_base)) {
-				return -1;
-			}
-		} else if (maybe_match(pprio->high, name, len)) {
-			if (pprio->high->enable(pprio->high, pdata->reg_base))
-				return -1;
-		} else if (maybe_match(pprio->low, name, len)) {
-			if (!maybe_disable(pprio->high, pdata->reg_base))
-				return -1;
-			if (!pprio->low->enable(pprio->low, pdata->reg_base))
-				return -1;
-		} else;
-			/* bug */
+		}
 	}
 
 	return 0;
