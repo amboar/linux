@@ -20,6 +20,7 @@
 #include <linux/pinctrl/pinmux.h>
 #include <linux/pinctrl/pinconf.h>
 #include <linux/pinctrl/pinconf-generic.h>
+#include <linux/string.h>
 #include <linux/types.h>
 #include "core.h"
 #include "pinctrl-utils.h"
@@ -49,10 +50,22 @@
  * into a pin function expression. The expressions are limited in power to
  * what's required to implement the AST2400 pinctrl: They cannot be arbitrarily
  * compounded.  Instead, multiple descriptions can be chained with one type of
- * logical operator (mux_expr_and, mux_expr_or).  A pin's high and low
+ * logical operator (mux_expr_eval_and, mux_expr_eval_or).  A pin's high and low
  * priority expressions are then captured in a mux_prio struct, and a
  * pointer to this is tucked into the pin's pinctrl subsystem registration.
  */
+
+#define SCU3C 0x3C
+#define SCU3C 0x3C
+#define SCU70 0x70
+#define STRAP 0x70
+#define SCU80 0x80
+#define SCU84 0x84
+#define SCU88 0x88
+#define SCU8C 0x8C
+#define SCU90 0x90
+#define SCU94 0x94
+#define SIORD30 0x30
 
 struct mux_reg {
 	unsigned reg;
@@ -102,33 +115,82 @@ struct mux_expr {
 	const char *name;
 	int ndescs;
 	const struct mux_desc *descs;
-	int (*eval)(const struct mux_expr *, void __iomem *);
-	int (*enable)(const struct mux_expr *, void __iomem *);
-	int (*disable)(const struct mux_expr *, void __iomem *);
+	bool (*eval)(const struct mux_expr *, void __iomem *);
+	bool (*enable)(const struct mux_expr *, void __iomem *);
+	bool (*disable)(const struct mux_expr *, void __iomem *);
 };
 
-static int mux_expr_and(const struct mux_expr *expr, void __iomem *base)
+static bool mux_expr_eval_and(const struct mux_expr *expr, void __iomem *base)
 {
-	int ret = 1;
+	bool ret = true;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
 		const struct mux_desc *desc = &expr->descs[i];
 		ret = ret && desc->eval(desc, base);
 	}
+
 	return ret;
 }
 
-static int mux_expr_or(const struct mux_expr *expr, void  __iomem *base)
+static bool mux_expr_eval_or(const struct mux_expr *expr, void  __iomem *base)
 {
-	int ret = 0;
+	bool ret = false;
 	int i;
 
 	for (i = 0; i < expr->ndescs; i++) {
 		const struct mux_desc *desc = &expr->descs[i];
 		ret = ret || desc->eval(desc, base);
 	}
+
 	return ret;
+}
+
+static bool mux_expr_enable(const struct mux_expr *expr, void __iomem *base)
+{
+	int i;
+
+	/* Strategy: Flip bits until we're enabled or we run out of bits.
+	 * Except STRAP or SIO.
+	 */
+	for (i = 0; i < expr->ndescs && !expr->eval(expr, base); i++) {
+		const struct mux_desc *desc = &expr->descs[i];
+		const struct mux_reg *reg = desc->reg;
+		u32 val;
+
+		if (reg->reg == STRAP || reg->reg == SIORD30)
+			continue;
+
+		val = reg->read(base, reg->reg);
+		val |= (desc->val << desc->shift) & desc->mask;
+		reg->write(base, reg->reg, val);
+	}
+
+	return expr->eval(expr, base);
+}
+
+static bool mux_expr_disable(const struct mux_expr *expr, void __iomem *base)
+{
+	int i;
+
+	/* Strategy: Flip bits until we're disabled or we run out of bits.
+	 * Except STRAP or SIO.
+	 */
+	for (i = 0; i < expr->ndescs && expr->eval(expr, base); i++) {
+		const struct mux_desc *desc = &expr->descs[i];
+		const struct mux_reg *reg = desc->reg;
+		u32 val;
+
+		if (reg->reg == STRAP || reg->reg == SIORD30)
+			continue;
+
+		val = reg->read(base, reg->reg);
+		/* Is zeroing a hack? */
+		val &= ~desc->mask;
+		reg->write(base, reg->reg, val);
+	}
+
+	return !expr->eval(expr, base);
 }
 
 /* Cater for "unsupported" expressions with more specific functions. For
@@ -189,9 +251,11 @@ struct mux_prio {
 #define MUX_FUNC_EXPR_(_ball, _name, _prio, _op) \
 	static const struct mux_expr MUX_FUNC_SYM(_ball, _prio) = { \
 		.name = #_name, \
-		.eval = _op, \
 		.ndescs = ARRAY_SIZE(EXPR_DESCS_SYM(_ball, _prio)), \
 		.descs = &(EXPR_DESCS_SYM(_ball, _prio))[0], \
+		.eval = _op, \
+		.enable = mux_expr_enable, \
+		.disable = mux_expr_disable, \
 	}
 
 #define PIN_SYM__(_ball) ball_ ## _ball
@@ -291,18 +355,6 @@ struct mux_prio {
 #define H20 14
 #define E18 15
 
-#define SCU3C 0x3C
-#define SCU3C 0x3C
-#define SCU70 0x70
-#define STRAP 0x70
-#define SCU80 0x80
-#define SCU84 0x84
-#define SCU88 0x88
-#define SCU8C 0x8C
-#define SCU90 0x90
-#define SCU94 0x94
-#define SIORD30 0x30
-
 MUX_REG_MMIO(SCU3C);
 MUX_REG_MMIO(SCU80);
 MUX_REG_MMIO(SCU8C);
@@ -336,16 +388,16 @@ SF_PIN(J20, GPIOB1, SALT2, MUX_DESC_EQ(SCU80, 9, 1));
 SF_PIN(H18, GPIOB2, SALT3, MUX_DESC_EQ(SCU80, 10, 1));
 SF_PIN(F18, GPIOB3, SALT4, MUX_DESC_EQ(SCU80, 11, 1));
 
-SF_PIN_EXPR(E19, GPIOB4, LPCRST, mux_expr_or,
+SF_PIN_EXPR(E19, GPIOB4, LPCRST, mux_expr_eval_or,
 	       	MUX_DESC_EQ(SCU80, 12, 1),
 		MUX_DESC_EQ(STRAP, 14, 1));
 
 MUX_FUNC_EXPR(H19, LPCPD, HIGH_PRIO,
-		mux_expr_and,
+		mux_expr_eval_and,
 	       	MUX_DESC_EQ(SCU80, 13, 1),
 		MUX_DESC_EQ(SIORD30, 1, 0));
 MUX_FUNC_EXPR(H19, LPCSMI, LOW_PRIO,
-		mux_expr_and,
+		mux_expr_eval_and,
 	       	MUX_DESC_EQ(SCU80, 13, 1),
 		MUX_DESC_EQ(SIORD30, 1, 1));
 MF_PIN(H19, GPIOB5);
@@ -353,12 +405,12 @@ MF_PIN(H19, GPIOB5);
 SF_PIN(H20, GPIOB6, LPCPME, MUX_DESC_EQ(SCU80, 14, 1));
 
 MUX_FUNC_EXPR(E18, EXTRST, HIGH_PRIO,
-	       	mux_expr_and,
+	       	mux_expr_eval_and,
 	       	MUX_DESC_EQ(SCU80, 15, 1),
 		MUX_DESC_EQ(SCU90, 31, 0),
 		MUX_DESC_EQ(SCU3C, 3, 1));
 MUX_FUNC_EXPR(E18, SPICS1, LOW_PRIO,
-	       	mux_expr_and,
+	       	mux_expr_eval_and,
 	       	MUX_DESC_EQ(SCU80, 15, 1),
 		MUX_DESC_EQ(SCU90, 31, 1));
 MF_PIN(E18, GPIOB7);
@@ -366,7 +418,7 @@ MF_PIN(E18, GPIOB7);
 /*
 MUX_FUNC(A18, "SD2CLK", HIGH_PRIO, MUX_DESC_EQ(SCU90, 1, 1));
 MUX_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
-	       	mux_expr_or,
+	       	mux_expr_eval_or,
 	       	MUX_DESC_EQ(SCU8C, 1, 1),
 		MUX_DESC_EQ(STRAP, 21, 1));
 MF_PIN(A18, "GPIOD0");
@@ -621,11 +673,59 @@ static int ast2400_pinmux_get_fn_groups(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
+static inline int maybe_disable(const struct mux_expr *expr, void __iomem *base)
+{
+	if (expr)
+		return expr->disable(expr, base);
+	return 1;
+}
+
+static inline bool maybe_match(const struct mux_expr *expr,
+	       	const char *const name, size_t n)
+{
+	if (expr) {
+		return strncmp(name, expr->name, n) == 0;
+	}
+	return false;
+}
+
 static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
 			      unsigned function,
 			      unsigned group)
 {
-	return -ENOTSUPP;
+	int i;
+	const struct ast2400_pinctrl_data *pdata =
+	       	pinctrl_dev_get_drvdata(pctldev);
+	const struct ast2400_pin_group *pgroup = &pdata->groups[group];
+	const char *const name = pdata->functions[function].name;
+	const size_t len = strlen(name);
+
+	for (i = 0; i < pgroup->npins; i++) {
+		int pin = pgroup->pins[i];
+		const struct pinctrl_pin_desc *ppin = &pdata->pins[pin];
+		const struct mux_prio *pprio = ppin->drv_data;
+
+		/* Set requested mux */
+		if (strncmp(name, pprio->other, len) == 0) {
+			if (!maybe_disable(pprio->high, pdata->reg_base)) {
+				return -1;
+			}
+			if (!maybe_disable(pprio->low, pdata->reg_base)) {
+				return -1;
+			}
+		} else if (maybe_match(pprio->high, name, len)) {
+			if (pprio->high->enable(pprio->high, pdata->reg_base))
+				return -1;
+		} else if (maybe_match(pprio->low, name, len)) {
+			if (!maybe_disable(pprio->high, pdata->reg_base))
+				return -1;
+			if (!pprio->low->enable(pprio->low, pdata->reg_base))
+				return -1;
+		} else;
+			/* bug */
+	}
+
+	return 0;
 }
 
 enum pin_prio { prio_other = 0, prio_low, prio_high };
@@ -641,16 +741,12 @@ static int eval_mux_expr(const struct mux_expr *expr, void __iomem *base)
 	return expr->descs->eval(expr->descs, base);
 }
 
-static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
-	       			  	  unsigned offset)
+static enum pin_prio get_pin_prio(struct mux_prio *prios, void __iomem *base)
 {
-	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
-	struct mux_prio *prios = pdata->pins[offset].drv_data;
-
-	if (eval_mux_expr(prios->high, pdata->reg_base))
+	if (eval_mux_expr(prios->high, base))
 		return prio_high;
 
-	if (eval_mux_expr(prios->low, pdata->reg_base))
+	if (eval_mux_expr(prios->low, base))
 		return prio_low;
 
 	return prio_other;
@@ -658,18 +754,27 @@ static enum pin_prio get_pin_prio(struct pinctrl_dev *pctldev,
 
 static int ast2400_pinmux_request(struct pinctrl_dev *pctldev, unsigned offset)
 {
-	return -((int) get_pin_prio(pctldev, offset));
+	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
+	struct mux_prio *prios = pdata->pins[offset].drv_data;
+
+	return -((int) get_pin_prio(prios, pdata->reg_base));
 }
 
 static int ast2400_pinmux_free(struct pinctrl_dev *pctldev, unsigned offset)
 {
-	enum pin_prio prio = get_pin_prio(pctldev, offset);
+	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
+	struct mux_prio *prios = pdata->pins[offset].drv_data;
+
+	enum pin_prio prio = get_pin_prio(prios, pdata->reg_base);
 	switch (prio) {
 		case prio_high:
+			prios->high->disable(prios->high, pdata->reg_base);
 			break;
 		case prio_low:
+			prios->low->disable(prios->low, pdata->reg_base);
 			break;
 		case prio_other:
+			/* No action required */
 			break;
 	}
 	return prio;
