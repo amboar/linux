@@ -222,6 +222,7 @@ static int mux_expr_gpioh(const struct mux_expr *expr, void __iomem *base)
 	ra = desc->eval(desc, base);
 	desc = &expr->descs[2];
 	rb = desc->eval(desc, base);
+
 	return ra && rb;
 }
 
@@ -242,11 +243,10 @@ struct mux_prio {
 	static const struct mux_desc EXPR_DESCS_SYM(_pin, _prio)[] = \
 		{ __VA_ARGS__ }
 
-#define MUX_FUNC_SYM__(_pin, _prio) mux_expr_ ## _pin ## _ ## _prio
-#define MUX_FUNC_SYM(_pin, _prio) MUX_FUNC_SYM__(_pin, _prio)
+#define MUX_FUNC_SYM(_signal) mux_expr_ ## _signal
 
 #define MUX_FUNC_EXPR_(_pin, _name, _prio, _op) \
-	static const struct mux_expr MUX_FUNC_SYM(_pin, _prio) = { \
+	static const struct mux_expr MUX_FUNC_SYM(_name) = { \
 		.name = #_name, \
 		.ndescs = ARRAY_SIZE(EXPR_DESCS_SYM(_pin, _prio)), \
 		.descs = &(EXPR_DESCS_SYM(_pin, _prio))[0], \
@@ -268,10 +268,7 @@ struct mux_prio {
 #define SF_PIN_EXPR_(_pin, _other, _name, _prio, _op, ...) \
 	EXPR_DESCS_(_pin, _prio, __VA_ARGS__); \
 	MUX_FUNC_EXPR_(_pin, _name, _prio, _op); \
-	MF_PIN_(_pin, _other, &MUX_FUNC_SYM(_pin, HIGH_PRIO), NULL)
-
-#define SF_PIN_EXPR__(_pin, _other, _name, _prio, _op, ...) \
-	SF_PIN_EXPR_(_pin, _other, _name, _prio, _op, __VA_ARGS__)
+	MF_PIN_(_pin, _other, &MUX_FUNC_SYM(_name), NULL)
 
 /* The non-internal macros */
 
@@ -322,18 +319,36 @@ struct mux_prio {
  * to invoke MUX_FUNC() or MUX_FUNC_EXPR() for both HIGH_PRIO and
  * LOW_PRIO to define the expressions before invoking MF_PIN().
  * Failure to do so will give a compilation error. */
-#define MF_PIN(_pin, _other) \
+#define MF_PIN(_pin, _other, _high, _low) \
 	MF_PIN_(_pin, _other, \
-		       	&MUX_FUNC_SYM(_pin, HIGH_PRIO), \
-		       	&MUX_FUNC_SYM(_pin, LOW_PRIO))
+		       	&MUX_FUNC_SYM(_high), \
+		       	&MUX_FUNC_SYM(_low))
 
 /* Single function pin, enabled by a multi-descriptor pin expression */
 #define SF_PIN_EXPR(_pin, _other, _name, _op, ...) \
-	SF_PIN_EXPR__(_pin, _other, _name, HIGH_PRIO, _op, __VA_ARGS__)
+	SF_PIN_EXPR_(_pin, _other, _name, HIGH_PRIO, _op, __VA_ARGS__)
 
 /* Single function pin, enabled by a single pin descriptor */
 #define SF_PIN(_pin, _other, _name, ...) \
 	SF_PIN_EXPR(_pin, _other, _name, NULL, __VA_ARGS__)
+
+#define PIN_GROUP_SYM(_name) pins_ ## _name 
+#define PIN_GROUP_(_name, ...) \
+	static const int PIN_GROUP_SYM(_name)[] = { __VA_ARGS__ }
+#define PIN_GROUP(_name, ...) PIN_GROUP_(_name, __VA_ARGS__)
+
+#define FUNC_SIGNALS_SYM(_name) func_signals_ ## _name
+#define FUNC_SIGNALS(_name, ...) \
+	const struct mux_expr *const FUNC_SIGNALS_SYM(_name)[] = { __VA_ARGS__ }
+#define FUNC_SIGNAL(_name) &MUX_FUNC_SYM(_name)
+
+#define FUNC_GROUP_SYM(_name) groups_ ## _name 
+#define FUNC_GROUP(_name, ...) \
+	FUNC_SIGNALS(_name, __VA_ARGS__); \
+	static const char *const FUNC_GROUP_SYM(_name)[] = { #_name }
+
+#define FUNC_GROUP_GPIO(_name) FUNC_GROUP(_name)
+#define FUNC_GROUP_SINGLE(_name) FUNC_GROUP(_name, FUNC_SIGNAL(_name))
 
 #define D6 0
 #define B5 1
@@ -360,34 +375,96 @@ MUX_REG_MMIO(STRAP);
 MUX_REG_SIO(SIORD30);
 
 SF_PIN(D6, GPIOA0, MAC1LINK, MUX_DESC_EQ(SCU80, 0, 1));
+PIN_GROUP(GPIOA0, D6);
+FUNC_GROUP_GPIO(GPIOA0);
+PIN_GROUP(MAC1LINK, D6);
+FUNC_GROUP_SINGLE(MAC1LINK);
+
 SF_PIN(B5, GPIOA1, MAC2LINK, MUX_DESC_EQ(SCU80, 1, 1));
+PIN_GROUP(GPIOA1, B5);
+FUNC_GROUP_GPIO(GPIOA1);
+PIN_GROUP(MAC2LINK, B5);
+FUNC_GROUP_SINGLE(MAC2LINK);
+
 SF_PIN(A4, GPIOA2, TIMER3, MUX_DESC_EQ(SCU80, 2, 1));
+PIN_GROUP(GPIOA2, A4);
+FUNC_GROUP_GPIO(GPIOA2);
+PIN_GROUP(TIMER3, A4);
+FUNC_GROUP_SINGLE(TIMER3);
+
 SF_PIN(E6, GPIOA3, TIMER4, MUX_DESC_EQ(SCU80, 3, 1));
+PIN_GROUP(GPIOA3, E6);
+FUNC_GROUP_GPIO(GPIOA3);
+PIN_GROUP(TIMER4, E6);
+FUNC_GROUP_SINGLE(TIMER4);
 
 MUX_FUNC(C5, SCL9, HIGH_PRIO, MUX_DESC_EQ(SCU90, 22, 1));
 MUX_FUNC(C5, TIMER5, LOW_PRIO, MUX_DESC_EQ(SCU80, 4, 1));
-MF_PIN(C5, GPIOA4);
+MF_PIN(C5, GPIOA4, SCL9, TIMER5);
+PIN_GROUP(GPIOA4, C5);
+FUNC_GROUP_GPIO(GPIOA4);
+PIN_GROUP(TIMER5, C5);
+FUNC_GROUP_SINGLE(TIMER5);
 
 MUX_FUNC(B4, SDA9, HIGH_PRIO, MUX_DESC_EQ(SCU90, 22, 1));
 MUX_FUNC(B4, TIMER6, LOW_PRIO, MUX_DESC_EQ(SCU80, 5, 1));
-MF_PIN(B4, GPIOA5);
+MF_PIN(B4, GPIOA5, SDA9, TIMER6);
+PIN_GROUP(GPIOA5, B4);
+FUNC_GROUP_GPIO(GPIOA5);
+PIN_GROUP(TIMER6, B4);
+FUNC_GROUP_SINGLE(TIMER6);
+PIN_GROUP(I2C9, C5, B4);
+FUNC_GROUP(I2C9, FUNC_SIGNAL(SCL9), FUNC_SIGNAL(SDA9));
 
 MUX_FUNC(A3, MDC2, HIGH_PRIO, MUX_DESC_EQ(SCU90, 2, 1));
 MUX_FUNC(A3, TIMER7, LOW_PRIO, MUX_DESC_EQ(SCU80, 6, 1));
-MF_PIN(A3, GPIOA6);
+MF_PIN(A3, GPIOA6, MDC2, TIMER7);
+PIN_GROUP(GPIOA6, A3);
+FUNC_GROUP_GPIO(GPIOA6);
+PIN_GROUP(TIMER7, A3);
+FUNC_GROUP_SINGLE(TIMER7);
 
 MUX_FUNC(D5, MDIO2, HIGH_PRIO, MUX_DESC_EQ(SCU90, 2, 1));
 MUX_FUNC(D5, TIMER8, LOW_PRIO, MUX_DESC_EQ(SCU80, 7, 1));
-MF_PIN(D5, GPIOA7);
+MF_PIN(D5, GPIOA7, MDIO2, TIMER8);
+PIN_GROUP(GPIOA7, D5);
+FUNC_GROUP_GPIO(GPIOA7);
+PIN_GROUP(TIMER8, D5);
+FUNC_GROUP_SINGLE(TIMER8);
+PIN_GROUP(MD2, A3, D5);
+FUNC_GROUP(MD2, FUNC_SIGNAL(MDC2), FUNC_SIGNAL(MDIO2));
 
 SF_PIN(J21, GPIOB0, SALT1, MUX_DESC_EQ(SCU80, 8, 1));
+PIN_GROUP(GPIOB0, J21);
+FUNC_GROUP_GPIO(GPIOB0);
+PIN_GROUP(SALT1, J21);
+FUNC_GROUP_SINGLE(SALT1);
+
 SF_PIN(J20, GPIOB1, SALT2, MUX_DESC_EQ(SCU80, 9, 1));
+PIN_GROUP(GPIOB1, J20);
+FUNC_GROUP_GPIO(GPIOB1);
+PIN_GROUP(SALT2, J20);
+FUNC_GROUP_SINGLE(SALT2);
+
 SF_PIN(H18, GPIOB2, SALT3, MUX_DESC_EQ(SCU80, 10, 1));
+PIN_GROUP(GPIOB2, H18);
+FUNC_GROUP_GPIO(GPIOB2);
+PIN_GROUP(SALT3, H18);
+FUNC_GROUP_SINGLE(SALT3);
+
 SF_PIN(F18, GPIOB3, SALT4, MUX_DESC_EQ(SCU80, 11, 1));
+PIN_GROUP(GPIOB3, F18);
+FUNC_GROUP_GPIO(GPIOB3);
+PIN_GROUP(SALT4, F18);
+FUNC_GROUP_SINGLE(SALT4);
 
 SF_PIN_EXPR(E19, GPIOB4, LPCRST, mux_expr_eval_or,
 	       	MUX_DESC_EQ(SCU80, 12, 1),
 		MUX_DESC_EQ(STRAP, 14, 1));
+PIN_GROUP(GPIOB4, E19);
+FUNC_GROUP_GPIO(GPIOB4);
+PIN_GROUP(LPCRST, E19);
+FUNC_GROUP_SINGLE(LPCRST);
 
 MUX_FUNC_EXPR(H19, LPCPD, HIGH_PRIO,
 		mux_expr_eval_and,
@@ -397,9 +474,19 @@ MUX_FUNC_EXPR(H19, LPCSMI, LOW_PRIO,
 		mux_expr_eval_and,
 	       	MUX_DESC_EQ(SCU80, 13, 1),
 		MUX_DESC_EQ(SIORD30, 1, 1));
-MF_PIN(H19, GPIOB5);
+MF_PIN(H19, GPIOB5, LPCPD, LPCSMI);
+PIN_GROUP(GPIOB5, H19);
+FUNC_GROUP_GPIO(GPIOB5);
+PIN_GROUP(LPCPD, H19);
+FUNC_GROUP_SINGLE(LPCPD);
+PIN_GROUP(LPCSMI, H19);
+FUNC_GROUP_SINGLE(LPCSMI);
 
 SF_PIN(H20, GPIOB6, LPCPME, MUX_DESC_EQ(SCU80, 14, 1));
+PIN_GROUP(GPIOB6, H20);
+FUNC_GROUP_GPIO(GPIOB6);
+PIN_GROUP(LPCPME, H20);
+FUNC_GROUP_SINGLE(LPCPME);
 
 MUX_FUNC_EXPR(E18, EXTRST, HIGH_PRIO,
 	       	mux_expr_eval_and,
@@ -410,7 +497,13 @@ MUX_FUNC_EXPR(E18, SPICS1, LOW_PRIO,
 	       	mux_expr_eval_and,
 	       	MUX_DESC_EQ(SCU80, 15, 1),
 		MUX_DESC_EQ(SCU90, 31, 1));
-MF_PIN(E18, GPIOB7);
+MF_PIN(E18, GPIOB7, EXTRST, SPICS1);
+PIN_GROUP(GPIOB7, E18);
+FUNC_GROUP_GPIO(GPIOB7);
+PIN_GROUP(EXTRST, E18);
+FUNC_GROUP_SINGLE(EXTRST);
+PIN_GROUP(SPICS1, E18);
+FUNC_GROUP_SINGLE(SPICS1);
 
 /*
 MUX_FUNC(A18, "SD2CLK", HIGH_PRIO, MUX_DESC_EQ(SCU90, 1, 1));
@@ -437,6 +530,7 @@ static const struct pinctrl_pin_desc ast2400_pins[] = {
 	AST_PINCTRL_PIN(B4),
 	AST_PINCTRL_PIN(A3),
 	AST_PINCTRL_PIN(D5),
+
 	AST_PINCTRL_PIN(J21),
 	AST_PINCTRL_PIN(J20),
 	AST_PINCTRL_PIN(H18),
@@ -446,35 +540,6 @@ static const struct pinctrl_pin_desc ast2400_pins[] = {
 	AST_PINCTRL_PIN(H20),
 	AST_PINCTRL_PIN(E18)
 };
-
-#define PIN_GROUP_SYM(_name) _name ## _pins
-#define PIN_GROUP_(_name, ...) \
-	static const int PIN_GROUP_SYM(_name)[] = { __VA_ARGS__ }
-#define PIN_GROUP(_name, ...) PIN_GROUP_(_name, __VA_ARGS__)
-
-PIN_GROUP(GPIOA, D6, B5, A4, E6, C5, B4, A3, D5);
-PIN_GROUP(MAC1LINK, D6);
-PIN_GROUP(MAC2LINK, B5);
-PIN_GROUP(TIMER3, A4);
-PIN_GROUP(TIMER4, E6);
-PIN_GROUP(TIMER5, C5);
-PIN_GROUP(TIMER6, B4);
-PIN_GROUP(I2C9, C5, B4);
-PIN_GROUP(TIMER7, A3);
-PIN_GROUP(TIMER8, D5);
-PIN_GROUP(MD2, A3, D5);
-
-PIN_GROUP(GPIOB, J21, J20, H18, F18, E19, H19, H20, E18);
-PIN_GROUP(SALT1, J21);
-PIN_GROUP(SALT2, J20);
-PIN_GROUP(SALT3, H18);
-PIN_GROUP(SALT4, F18);
-PIN_GROUP(LPCRST, E19);
-PIN_GROUP(LPCPD, H19);
-PIN_GROUP(LPCSMI, H19);
-PIN_GROUP(LPCPME, H20);
-PIN_GROUP(EXTRST, E18);
-PIN_GROUP(SPICS1, E18);
 
 struct ast2400_pin_group {
 	const char *name;
@@ -489,7 +554,14 @@ struct ast2400_pin_group {
 }
 
 static const struct ast2400_pin_group ast2400_groups[] = {
-	AST_PINCTRL_GROUP(GPIOA),
+	AST_PINCTRL_GROUP(GPIOA0),
+	AST_PINCTRL_GROUP(GPIOA1),
+	AST_PINCTRL_GROUP(GPIOA2),
+	AST_PINCTRL_GROUP(GPIOA3),
+	AST_PINCTRL_GROUP(GPIOA4),
+	AST_PINCTRL_GROUP(GPIOA5),
+	AST_PINCTRL_GROUP(GPIOA6),
+	AST_PINCTRL_GROUP(GPIOA7),
 	AST_PINCTRL_GROUP(MAC1LINK),
 	AST_PINCTRL_GROUP(MAC2LINK),
 	AST_PINCTRL_GROUP(TIMER3),
@@ -500,7 +572,15 @@ static const struct ast2400_pin_group ast2400_groups[] = {
 	AST_PINCTRL_GROUP(TIMER7),
 	AST_PINCTRL_GROUP(TIMER8),
 	AST_PINCTRL_GROUP(MD2),
-	AST_PINCTRL_GROUP(GPIOB),
+
+	AST_PINCTRL_GROUP(GPIOB0),
+	AST_PINCTRL_GROUP(GPIOB1),
+	AST_PINCTRL_GROUP(GPIOB2),
+	AST_PINCTRL_GROUP(GPIOB3),
+	AST_PINCTRL_GROUP(GPIOB4),
+	AST_PINCTRL_GROUP(GPIOB5),
+	AST_PINCTRL_GROUP(GPIOB6),
+	AST_PINCTRL_GROUP(GPIOB7),
 	AST_PINCTRL_GROUP(SALT1),
 	AST_PINCTRL_GROUP(SALT2),
 	AST_PINCTRL_GROUP(SALT3),
@@ -510,49 +590,33 @@ static const struct ast2400_pin_group ast2400_groups[] = {
 	AST_PINCTRL_GROUP(LPCSMI),
 	AST_PINCTRL_GROUP(LPCPME),
 	AST_PINCTRL_GROUP(EXTRST),
-	AST_PINCTRL_GROUP(GPIOB),
 };
-
-#define FUNC_GROUP_SYM(_name) _name ## _groups
-#define FUNC_GROUP(_name) \
-	static const char *const FUNC_GROUP_SYM(_name)[] = { #_name }
-
-FUNC_GROUP(GPIOA);
-FUNC_GROUP(MAC1LINK);
-FUNC_GROUP(MAC2LINK);
-FUNC_GROUP(TIMER3);
-FUNC_GROUP(TIMER4);
-FUNC_GROUP(TIMER5);
-FUNC_GROUP(TIMER6);
-FUNC_GROUP(I2C9);
-FUNC_GROUP(TIMER7);
-FUNC_GROUP(TIMER8);
-FUNC_GROUP(MD2);
-FUNC_GROUP(GPIOB);
-FUNC_GROUP(SALT1);
-FUNC_GROUP(SALT2);
-FUNC_GROUP(SALT3);
-FUNC_GROUP(SALT4);
-FUNC_GROUP(LPCRST);
-FUNC_GROUP(LPCPD);
-FUNC_GROUP(LPCSMI);
-FUNC_GROUP(LPCPME);
-FUNC_GROUP(EXTRST);
 
 struct ast2400_pin_function {
 	const char *name;
 	const char *const *groups;
-	const unsigned ngroups;
+	unsigned ngroups;
+	const struct mux_expr *const *signals;
+	unsigned nsignals;
 };
 
-#define AST_PINCTRL_FUNC(_name) { \
+#define AST_PINCTRL_FUNC(_name, ...) { \
 	.name = #_name, \
 	.groups = &FUNC_GROUP_SYM(_name)[0], \
 	.ngroups = ARRAY_SIZE(FUNC_GROUP_SYM(_name)), \
+	.signals = &FUNC_SIGNALS_SYM(_name)[0], \
+	.nsignals = ARRAY_SIZE(FUNC_SIGNALS_SYM(_name)), \
 }
 
 static const struct ast2400_pin_function ast2400_functions[] = {
-	AST_PINCTRL_FUNC(GPIOA),
+	AST_PINCTRL_FUNC(GPIOA0),
+	AST_PINCTRL_FUNC(GPIOA1),
+	AST_PINCTRL_FUNC(GPIOA2),
+	AST_PINCTRL_FUNC(GPIOA3),
+	AST_PINCTRL_FUNC(GPIOA4),
+	AST_PINCTRL_FUNC(GPIOA5),
+	AST_PINCTRL_FUNC(GPIOA6),
+	AST_PINCTRL_FUNC(GPIOA7),
 	AST_PINCTRL_FUNC(MAC1LINK),
 	AST_PINCTRL_FUNC(MAC2LINK),
 	AST_PINCTRL_FUNC(TIMER3),
@@ -563,7 +627,15 @@ static const struct ast2400_pin_function ast2400_functions[] = {
 	AST_PINCTRL_FUNC(TIMER7),
 	AST_PINCTRL_FUNC(TIMER8),
 	AST_PINCTRL_FUNC(MD2),
-	AST_PINCTRL_FUNC(GPIOB),
+
+	AST_PINCTRL_FUNC(GPIOB0),
+	AST_PINCTRL_FUNC(GPIOB1),
+	AST_PINCTRL_FUNC(GPIOB2),
+	AST_PINCTRL_FUNC(GPIOB3),
+	AST_PINCTRL_FUNC(GPIOB4),
+	AST_PINCTRL_FUNC(GPIOB5),
+	AST_PINCTRL_FUNC(GPIOB6),
+	AST_PINCTRL_FUNC(GPIOB7),
 	AST_PINCTRL_FUNC(SALT1),
 	AST_PINCTRL_FUNC(SALT2),
 	AST_PINCTRL_FUNC(SALT3),
@@ -573,7 +645,6 @@ static const struct ast2400_pin_function ast2400_functions[] = {
 	AST_PINCTRL_FUNC(LPCSMI),
 	AST_PINCTRL_FUNC(LPCPME),
 	AST_PINCTRL_FUNC(EXTRST),
-	AST_PINCTRL_FUNC(GPIOB),
 };
 
 struct ast2400_pinctrl_data {
