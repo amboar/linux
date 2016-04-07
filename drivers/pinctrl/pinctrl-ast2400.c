@@ -194,8 +194,8 @@ static bool mux_expr_disable(const struct mux_expr *expr, void __iomem *base)
 	return !expr->eval(expr, base);
 }
 
-/* Cater for "unsupported" expressions with more specific functions. For
- * example, mux_expr_gpioh() implements the following expression:
+/* Cater for mixed operation expressions with more specific functions. For
+ * example, mux_expr_romd() implements the following expression:
  *
  * SCU90[6]=1 || Strap[4,1:0]=100
  *
@@ -203,7 +203,7 @@ static bool mux_expr_disable(const struct mux_expr *expr, void __iomem *base)
  *
  * SCU90[6]=1 || (Strap[4]=1 && Strap[1:0]=0)
  */
-static int mux_expr_gpioh(const struct mux_expr *expr, void __iomem *base)
+static int mux_expr_romd(const struct mux_expr *expr, void __iomem *base)
 {
 	const struct mux_desc *desc;
 	bool ra, rb;
