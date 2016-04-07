@@ -90,6 +90,7 @@ u32 read_sio_bits(void __iomem *base, unsigned offset)
 
 void write_sio_bits(void __iomem *base, unsigned offset, u32 val)
 {
+	/* Something... */
 }
 
 struct mux_desc {
@@ -205,7 +206,7 @@ static bool mux_expr_disable(const struct mux_expr *expr, void __iomem *base)
 static int mux_expr_gpioh(const struct mux_expr *expr, void __iomem *base)
 {
 	const struct mux_desc *desc;
-	int ra, rb;
+	bool ra, rb;
 
 	if (expr->ndescs != 3) {
 		/* write error and return */
@@ -214,18 +215,14 @@ static int mux_expr_gpioh(const struct mux_expr *expr, void __iomem *base)
 
 	desc = &expr->descs[0];
 	ra = desc->eval(desc, base);
-	if (ra == 1) {
-		return 1;
-	} else if (ra == 0) {
-		desc = &expr->descs[1];
-		ra = desc->eval(desc, base);
-		desc = &expr->descs[2];
-		rb = desc->eval(desc, base);
-		if (ra == 1 && rb == 1) {
-			return 1;
-		}
-	}
-	return 0;
+	if (ra)
+		return ra;
+
+	desc = &expr->descs[1];
+	ra = desc->eval(desc, base);
+	desc = &expr->descs[2];
+	rb = desc->eval(desc, base);
+	return ra && rb;
 }
 
 struct mux_prio {
@@ -238,43 +235,43 @@ struct mux_prio {
 
 /* "Internal" macros - consumed by other macros providing better abstractions */
 
-#define EXPR_DESCS_SYM__(_ball, _prio) mux_descs_ ## _ball ## _ ## _prio
-#define EXPR_DESCS_SYM(_ball, _prio) EXPR_DESCS_SYM__(_ball, _prio)
+#define EXPR_DESCS_SYM__(_pin, _prio) mux_descs_ ## _pin ## _ ## _prio
+#define EXPR_DESCS_SYM(_pin, _prio) EXPR_DESCS_SYM__(_pin, _prio)
 
-#define EXPR_DESCS_(_ball, _prio, ...) \
-	static const struct mux_desc EXPR_DESCS_SYM(_ball, _prio)[] = \
+#define EXPR_DESCS_(_pin, _prio, ...) \
+	static const struct mux_desc EXPR_DESCS_SYM(_pin, _prio)[] = \
 		{ __VA_ARGS__ }
 
-#define MUX_FUNC_SYM__(_ball, _prio) mux_expr_ ## _ball ## _ ## _prio
-#define MUX_FUNC_SYM(_ball, _prio) MUX_FUNC_SYM__(_ball, _prio)
+#define MUX_FUNC_SYM__(_pin, _prio) mux_expr_ ## _pin ## _ ## _prio
+#define MUX_FUNC_SYM(_pin, _prio) MUX_FUNC_SYM__(_pin, _prio)
 
-#define MUX_FUNC_EXPR_(_ball, _name, _prio, _op) \
-	static const struct mux_expr MUX_FUNC_SYM(_ball, _prio) = { \
+#define MUX_FUNC_EXPR_(_pin, _name, _prio, _op) \
+	static const struct mux_expr MUX_FUNC_SYM(_pin, _prio) = { \
 		.name = #_name, \
-		.ndescs = ARRAY_SIZE(EXPR_DESCS_SYM(_ball, _prio)), \
-		.descs = &(EXPR_DESCS_SYM(_ball, _prio))[0], \
+		.ndescs = ARRAY_SIZE(EXPR_DESCS_SYM(_pin, _prio)), \
+		.descs = &(EXPR_DESCS_SYM(_pin, _prio))[0], \
 		.eval = _op, \
 		.enable = mux_expr_enable, \
 		.disable = mux_expr_disable, \
 	}
 
-#define PIN_SYM__(_ball) ball_ ## _ball
-#define PIN_SYM(_ball) PIN_SYM__(_ball)
+#define PIN_SYM__(_pin) pin_ ## _pin
+#define PIN_SYM(_pin) PIN_SYM__(_pin)
 
-#define MF_PIN_(_ball, _other, _high, _low) \
-	static const struct mux_prio PIN_SYM(_ball) = { \
+#define MF_PIN_(_pin, _other, _high, _low) \
+	static const struct mux_prio PIN_SYM(_pin) = { \
 		.other = #_other, \
 		.high = _high, \
 		.low = _low, \
 	}
 
-#define SF_PIN_EXPR_(_ball, _other, _name, _prio, _op, ...) \
-	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
-	MUX_FUNC_EXPR_(_ball, _name, _prio, _op); \
-	MF_PIN_(_ball, _other, &MUX_FUNC_SYM(_ball, HIGH_PRIO), NULL)
+#define SF_PIN_EXPR_(_pin, _other, _name, _prio, _op, ...) \
+	EXPR_DESCS_(_pin, _prio, __VA_ARGS__); \
+	MUX_FUNC_EXPR_(_pin, _name, _prio, _op); \
+	MF_PIN_(_pin, _other, &MUX_FUNC_SYM(_pin, HIGH_PRIO), NULL)
 
-#define SF_PIN_EXPR__(_ball, _other, _name, _prio, _op, ...) \
-	SF_PIN_EXPR_(_ball, _other, _name, _prio, _op, __VA_ARGS__)
+#define SF_PIN_EXPR__(_pin, _other, _name, _prio, _op, ...) \
+	SF_PIN_EXPR_(_pin, _other, _name, _prio, _op, __VA_ARGS__)
 
 /* The non-internal macros */
 
@@ -313,30 +310,30 @@ struct mux_prio {
 #define MUX_DESC_NEQ(_reg, _idx, _val) \
 	MUX_DESC(mux_desc_neq, _reg, _idx, _val)
 
-#define MUX_FUNC_EXPR(_ball, _name, _prio, _op, ...) \
-	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
-	MUX_FUNC_EXPR_(_ball, _name, _prio, _op)
+#define MUX_FUNC_EXPR(_pin, _name, _prio, _op, ...) \
+	EXPR_DESCS_(_pin, _prio, __VA_ARGS__); \
+	MUX_FUNC_EXPR_(_pin, _name, _prio, _op)
 
-#define MUX_FUNC(_ball, _name, _prio, ...) \
-	EXPR_DESCS_(_ball, _prio, __VA_ARGS__); \
-	MUX_FUNC_EXPR_(_ball, _name, _prio, NULL)
+#define MUX_FUNC(_pin, _name, _prio, ...) \
+	EXPR_DESCS_(_pin, _prio, __VA_ARGS__); \
+	MUX_FUNC_EXPR_(_pin, _name, _prio, NULL)
 
 /* Multi-function pin, i.e. has both high and low priority pin functions. Need
  * to invoke MUX_FUNC() or MUX_FUNC_EXPR() for both HIGH_PRIO and
  * LOW_PRIO to define the expressions before invoking MF_PIN().
  * Failure to do so will give a compilation error. */
-#define MF_PIN(_ball, _other) \
-	MF_PIN_(_ball, _other, \
-		       	&MUX_FUNC_SYM(_ball, HIGH_PRIO), \
-		       	&MUX_FUNC_SYM(_ball, LOW_PRIO))
+#define MF_PIN(_pin, _other) \
+	MF_PIN_(_pin, _other, \
+		       	&MUX_FUNC_SYM(_pin, HIGH_PRIO), \
+		       	&MUX_FUNC_SYM(_pin, LOW_PRIO))
 
 /* Single function pin, enabled by a multi-descriptor pin expression */
-#define SF_PIN_EXPR(_ball, _other, _name, _op, ...) \
-	SF_PIN_EXPR__(_ball, _other, _name, HIGH_PRIO, _op, __VA_ARGS__)
+#define SF_PIN_EXPR(_pin, _other, _name, _op, ...) \
+	SF_PIN_EXPR__(_pin, _other, _name, HIGH_PRIO, _op, __VA_ARGS__)
 
 /* Single function pin, enabled by a single pin descriptor */
-#define SF_PIN(_ball, _other, _name, ...) \
-	SF_PIN_EXPR(_ball, _other, _name, NULL, __VA_ARGS__)
+#define SF_PIN(_pin, _other, _name, ...) \
+	SF_PIN_EXPR(_pin, _other, _name, NULL, __VA_ARGS__)
 
 #define D6 0
 #define B5 1
