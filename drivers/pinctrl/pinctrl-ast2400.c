@@ -395,8 +395,8 @@ struct mux_prio {
  * Failure to do so will give a compilation error. */
 #define MF_PIN(_pin, _other, _high, _low) \
 	MF_PIN_(_pin, _other, \
-		       	&MUX_FUNC_SYM(_high), \
-		       	&MUX_FUNC_SYM(_low))
+			&MUX_FUNC_SYM(_high), \
+			&MUX_FUNC_SYM(_low))
 
 /* Single function pin, enabled by a multi-descriptor pin expression */
 #define SF_PIN_EXPR(_pin, _other, _name, _op, ...) \
@@ -561,7 +561,7 @@ FUNC_GROUP_SINGLE(SALT4);
 #define GPIOB4 GPIOB4
 #define LPCRST LPCRST
 SF_PIN_EXPR(E19, GPIOB4, LPCRST, mux_expr_eval_or,
-	       	MUX_DESC_EQ(SCU80, 12, 1),
+		MUX_DESC_EQ(SCU80, 12, 1),
 		MUX_DESC_EQ(STRAP, 14, 1));
 PIN_GROUP(GPIOB4, E19);
 FUNC_GROUP_GPIO(GPIOB4);
@@ -574,11 +574,11 @@ FUNC_GROUP_SINGLE(LPCRST);
 #define LPCSMI LPCSMI
 MUX_FUNC_EXPR(H19, LPCPD, HIGH_PRIO,
 		mux_expr_eval_and,
-	       	MUX_DESC_EQ(SCU80, 13, 1),
+		MUX_DESC_EQ(SCU80, 13, 1),
 		MUX_DESC_EQ(SIORD30, 1, 0));
 MUX_FUNC_EXPR(H19, LPCSMI, LOW_PRIO,
 		mux_expr_eval_and,
-	       	MUX_DESC_EQ(SCU80, 13, 1),
+		MUX_DESC_EQ(SCU80, 13, 1),
 		MUX_DESC_EQ(SIORD30, 1, 1));
 MF_PIN(H19, GPIOB5, LPCPD, LPCSMI);
 PIN_GROUP(GPIOB5, H19);
@@ -602,13 +602,13 @@ FUNC_GROUP_SINGLE(LPCPME);
 #define EXTRST EXTRST
 #define SPICS1 SPICS1
 MUX_FUNC_EXPR(E18, EXTRST, HIGH_PRIO,
-	       	mux_expr_eval_and,
-	       	MUX_DESC_EQ(SCU80, 15, 1),
+		mux_expr_eval_and,
+		MUX_DESC_EQ(SCU80, 15, 1),
 		MUX_DESC_EQ(SCU90, 31, 0),
 		MUX_DESC_EQ(SCU3C, 3, 1));
 MUX_FUNC_EXPR(E18, SPICS1, LOW_PRIO,
-	       	mux_expr_eval_and,
-	       	MUX_DESC_EQ(SCU80, 15, 1),
+		mux_expr_eval_and,
+		MUX_DESC_EQ(SCU80, 15, 1),
 		MUX_DESC_EQ(SCU90, 31, 1));
 MF_PIN(E18, GPIOB7, EXTRST, SPICS1);
 PIN_GROUP(GPIOB7, E18);
@@ -781,7 +781,7 @@ static int ast2400_pinctrl_get_groups_count(struct pinctrl_dev *pctldev)
 }
 
 static const char *ast2400_pinctrl_get_group_name(struct pinctrl_dev *pctldev,
-	       					  unsigned group)
+		unsigned group)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
 
@@ -789,9 +789,7 @@ static const char *ast2400_pinctrl_get_group_name(struct pinctrl_dev *pctldev,
 }
 
 static int ast2400_pinctrl_get_group_pins(struct pinctrl_dev *pctldev,
-					        unsigned group,
-					        const unsigned **pins,
-					        unsigned *npins)
+		unsigned group, const unsigned **pins, unsigned *npins)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
 
@@ -802,8 +800,7 @@ static int ast2400_pinctrl_get_group_pins(struct pinctrl_dev *pctldev,
 }
 
 static void ast2400_pinctrl_pin_dbg_show(struct pinctrl_dev *pctldev,
-					 struct seq_file *s,
-					 unsigned offset)
+		struct seq_file *s, unsigned offset)
 {
 	seq_printf(s, " %s", dev_name(pctldev->dev));
 }
@@ -833,9 +830,8 @@ static const char *ast2400_pinmux_get_fn_name(struct pinctrl_dev *pctldev,
 }
 
 static int ast2400_pinmux_get_fn_groups(struct pinctrl_dev *pctldev,
-					  unsigned function,
-					  const char * const **groups,
-					  unsigned * const num_groups)
+		unsigned function, const char * const **groups,
+		unsigned * const num_groups)
 {
 	struct ast2400_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
 
@@ -853,16 +849,15 @@ static inline int maybe_disable(const struct mux_expr *expr, void __iomem *base)
 }
 
 static int ast2400_pinmux_set_mux(struct pinctrl_dev *pctldev,
-			      unsigned function,
-			      unsigned group)
+		unsigned function, unsigned group)
 {
 	int i;
 	int ret;
 	const struct ast2400_pinctrl_data *pdata =
-	       	pinctrl_dev_get_drvdata(pctldev);
+		pinctrl_dev_get_drvdata(pctldev);
 	const struct ast2400_pin_group *pgroup = &pdata->groups[group];
 	const struct ast2400_pin_function *pfunc =
-	       	&pdata->functions[function];
+		&pdata->functions[function];
 	const bool gpio = pfunc->nsignals == 0;
 
 	if (pfunc->nsignals > 0 && pfunc->nsignals != pgroup->npins) {
