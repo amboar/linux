@@ -970,13 +970,10 @@ static int __init ast2400_pinctrl_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	pdata->reg_base = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(pdata->reg_base)) {
-		dev_err(&pdev->dev, "Failed to ioremap MEM resource\n");
-		return -ENODEV;
-	}
+	if (IS_ERR(pdata->reg_base))
+		return PTR_ERR(pdata->reg_base);
 
 	/* FIXME: do some dynamic stuff? See pinctrl-bcm281xx.c */
-
 	ast2400_pinctrl_desc.name = dev_name(&pdev->dev);
 	ast2400_pinctrl_desc.pins = ast2400_pinctrl.pins;
 	ast2400_pinctrl_desc.npins = ast2400_pinctrl.npins;
@@ -987,7 +984,7 @@ static int __init ast2400_pinctrl_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register pinctrl\n");
 		return PTR_ERR(pctl);
 	}
-	
+
 	platform_set_drvdata(pdev, pdata);
 
 	return 0;
