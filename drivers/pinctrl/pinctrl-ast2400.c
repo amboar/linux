@@ -28,7 +28,7 @@
 /* Overview
  * --------
  *
- * A pin on the AST2400 can have up to three functions:
+ * A pin on the AST2400 can optionally have up to three functions:
  *
  * 1. A "high" priority function
  * 2. A "low" priority function
@@ -37,22 +37,96 @@
  * The functions are enabled by logic expressions over a number of bits in a
  * number of registers in the SCU, and some ports in the SuperIO controller.
  *
- * This is all rather complex and tedious, so a number of structs, functions
- * and macros are defined. Together these help reduce the tedium and line noise
- * so the definitions in the source can be more easily matched up with the
- * definitions in data sheet.
+ * Challenges in the AST2400 Multifunction Pin Design
+ * --------------------------------------------------
  *
- * The approach is to divide the problem roughly in two, into pin control
- * descriptors and pin function expressions, which are tied together in a
- * struct capturing the function priorities.  A pin control descriptor tells
- * the driver where and how to extract a value and what the expected value
- * should be (or not be). Multiple pin control descriptors can be combined
- * into a pin function expression. The expressions are limited in power to
- * what's required to implement the AST2400 pinctrl: They cannot be arbitrarily
- * compounded.  Instead, multiple descriptions can be chained with one type of
- * logical operator (mux_expr_eval_and, mux_expr_eval_or).  A pin's high and low
- * priority expressions are then captured in a mux_prio struct, and a
- * pointer to this is tucked into the pin's pinctrl subsystem registration.
+ * * Different access techniques at the register level: MMIO vs SuperIO
+ *
+ * * AST2400 Pin function described by arbitrarily complex logical expressions
+ *
+ *   * We make a compromise to avoid an even hotter macro hell by attaching an
+ *     arbitrary evaluation function to the expression
+ *
+ *     * Can sensibly make linear what would otherwise be an expression tree by
+ *       shifting the structure to the evaluation function
+ *
+ * * Pin function is determined on a priority basis
+ *
+ *   * When a pin is allocated for a function, we need to disable any bits that
+ *     previously enabled a higher priority function on the pin
+ *
+ *     * Some functions might not be disabled if configured in the STRAP register
+ *
+ * * Pin function selection inconsistency
+ *
+ *   * Some functions are enabled on a per-pin basis for a multi-pin group
+ *   * Some some bits enable functions on multiple pins
+ *
+ * Pinmux Implementation Challenges
+ * --------------------------------
+ *
+ * * pinmux API forces structure on the description of functions, groups and pins
+ *
+ *   * Some work involved to correlate a pinmux function with the associated
+ *     signal expression on the function's group's pins.
+ *
+ *     * pins describe their high/low/other -priority signal expressions
+ *     * groups describe their pins (a group name and an array of pin indexes)
+ *     * functions describe their groups (a function name, and group name)
+ *
+ *       * We also describe the group's pins' signal expressions at the
+ *         function level
+ *
+ *         * This alleviates some macro madness at the expense of disconnecting
+ *           the description of group pins from their associated signal
+ *           expressions
+ *         * But we can meet the needs of the pinmux get_function_groups() and
+ *           get_group_pins() APIs
+ *
+ *       * A saving grace: functions don't appear to have multiple groups
+ *
+ * Design and implementation considerations
+ * ----------------------------------------
+ *
+ * * Attempt to align the visuals of pin and function definitions with the
+ *   datasheet to ease translation
+ *
+ * * The multifunction pin tables are declaritive, not algorithmic, so try to
+ *   also make the implementation declarative to reduce control flow complexity
+ *
+ * * Design the data structures such that we can lean on the compiler to avoid
+ *   or catch errors
+ *
+ *   * Define symbols for structures so they can be referenced by name
+ *
+ *     * Compiler enforces unique symbol names, detecting duplicates through
+ *       typos
+ *     * Compiler errors on undefined symbol names, detecting typos or missing
+ *       information
+ *
+ *   * Make the compiler calculate array sizes for us
+ *
+ * * Design macros such that we can lean on the CPP to
+ *
+ *   * Avoid duplicate specification of information where possible
+ *   * Reduce line noise of type declaration and assignment
+ *
+ * * If we allocate a pin, we can set it's bits without concern for the
+ *   function of already allocated pins.
+ *
+ *     * Conversely, failing to allocate all pins in a group indicates some
+ *       bits (as well as pins) required for the group's configuration will
+ *       already be in use, likely in a way that's inconsistent with the
+ *       requirements of the failed group.
+ *
+ *       * The transitive closure of pins related by bits in pin signal
+ *         expressions form functionally consistent disconnected subgraphs under
+ *         network analysis, indicating that functional integrity can be
+ *         protected purely through the pinctrl subsystem's mechanism for denying
+ *         multiple, concurrent pin access requests.
+ *
+ *       * Note: No-one has yet checked my analysis. I reserve the right to be
+ *         wrong.
  */
 
 #define SCU3C 0x3C
@@ -332,7 +406,7 @@ struct mux_prio {
 #define SF_PIN(_pin, _other, _name, ...) \
 	SF_PIN_EXPR(_pin, _other, _name, NULL, __VA_ARGS__)
 
-#define PIN_GROUP_SYM(_name) pins_ ## _name 
+#define PIN_GROUP_SYM(_name) pins_ ## _name
 #define PIN_GROUP_(_name, ...) \
 	static const int PIN_GROUP_SYM(_name)[] = { __VA_ARGS__ }
 #define PIN_GROUP(_name, ...) PIN_GROUP_(_name, __VA_ARGS__)
@@ -342,7 +416,7 @@ struct mux_prio {
 	const struct mux_expr *const FUNC_SIGNALS_SYM(_name)[] = { __VA_ARGS__ }
 #define FUNC_SIGNAL(_name) &MUX_FUNC_SYM(_name)
 
-#define FUNC_GROUP_SYM(_name) groups_ ## _name 
+#define FUNC_GROUP_SYM(_name) groups_ ## _name
 #define FUNC_GROUP(_name, ...) \
 	FUNC_SIGNALS(_name, __VA_ARGS__); \
 	static const char *const FUNC_GROUP_SYM(_name)[] = { #_name }
@@ -543,15 +617,6 @@ PIN_GROUP(EXTRST, E18);
 FUNC_GROUP_SINGLE(EXTRST);
 PIN_GROUP(SPICS1, E18);
 FUNC_GROUP_SINGLE(SPICS1);
-
-/*
-MUX_FUNC(A18, "SD2CLK", HIGH_PRIO, MUX_DESC_EQ(SCU90, 1, 1));
-MUX_FUNC_EXPR(A18, "GPID0(In)", LOW_PRIO,
-	       	mux_expr_eval_or,
-	       	MUX_DESC_EQ(SCU8C, 1, 1),
-		MUX_DESC_EQ(STRAP, 21, 1));
-MF_PIN(A18, "GPIOD0");
-*/
 
 #define AST_PINCTRL_PIN(_name) \
 	[_name] = { \
