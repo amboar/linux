@@ -20,9 +20,10 @@
 	};
 };
 
-&pinctrl {
+&mac0 {
+	status = "okay";
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_rgmii1_default>;
+	pinctrl-0 = <&pinctrl_rgmii1_default &pinctrl_mdio1_default>;
 };
 
 &uart5 {
