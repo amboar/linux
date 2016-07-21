@@ -541,6 +541,7 @@ static int aspeed_g5_pinctrl_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id aspeed_g5_pinctrl_of_match[] = {
+	{ .compatible = "aspeed,ast2500-pinctrl", },
 	{ .compatible = "aspeed,g5-pinctrl", },
 	{ },
 };
