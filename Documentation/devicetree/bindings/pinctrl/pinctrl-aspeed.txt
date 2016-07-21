@@ -5,9 +5,11 @@ The Aspeed SoCs vary in functionality inside a generation but have a common mux
 device register layout.
 
 Required properties:
-- compatible: should be one of the following:
-	"aspeed,g4-pinctrl";
-	"aspeed,g5-pinctrl"
+- compatible : should be one of the following:
+		"aspeed,ast2400-pinctrl"
+		"aspeed,g4-pinctrl";
+		"aspeed,ast2500-pinctrl"
+		"aspeed,g5-pinctrl"
 
 The pin controller node should be a child of a syscon node with the required
 property:
