@@ -196,7 +196,6 @@ static int aspeed_gpio_get_direction(struct gpio_chip *gc, unsigned offset)
 	spin_unlock_irqrestore(&gpio->lock, flags);
 
 	return !val;
-
 }
 
 static inline int irqd_to_aspeed_gpio_data(struct irq_data *d,

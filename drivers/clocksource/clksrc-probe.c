@@ -20,9 +20,13 @@
 #include <linux/clocksource.h>
 
 extern struct of_device_id __clksrc_of_table[];
+extern struct of_device_id __clksrc_ret_of_table[];
 
 static const struct of_device_id __clksrc_of_table_sentinel
 	__used __section(__clksrc_of_table_end);
+
+static const struct of_device_id __clksrc_ret_of_table_sentinel
+	__used __section(__clksrc_ret_of_table_end);
 
 void __init clocksource_probe(void)
 {
@@ -33,6 +37,22 @@ void __init clocksource_probe(void)
 	int ret;
 
 	for_each_matching_node_and_match(np, __clksrc_of_table, &match) {
+		if (!of_device_is_available(np))
+			continue;
+
+		init_func_ret = match->data;
+
+		ret = init_func_ret(np);
+		if (ret) {
+			pr_err("Failed to initialize '%s': %d",
+			       of_node_full_name(np), ret);
+			continue;
+		}
+
+		clocksources++;
+	}
+
+	for_each_matching_node_and_match(np, __clksrc_ret_of_table, &match) {
 		if (!of_device_is_available(np))
 			continue;
 
