@@ -320,30 +320,30 @@ static void aspeed_smc_send_cmd_addr(struct spi_nor *nor, u8 cmd, u32 addr)
 	}
 }
 
-static int aspeed_smc_read_user(struct spi_nor *nor, loff_t from, size_t len,
-				size_t *retlen, u_char *read_buf)
+static ssize_t aspeed_smc_read_user(struct spi_nor *nor, loff_t from, size_t len,
+				u_char *read_buf)
 {
 	struct aspeed_smc_chip *chip = nor->priv;
 
 	aspeed_smc_start_user(nor);
 	aspeed_smc_send_cmd_addr(nor, nor->read_opcode, from);
 	aspeed_smc_from_fifo(read_buf, chip->base, len);
-	*retlen += len;
 	aspeed_smc_stop_user(nor);
 
-	return 0;
+	return len;
 }
 
-static void aspeed_smc_write_user(struct spi_nor *nor, loff_t to, size_t len,
-				  size_t *retlen, const u_char *write_buf)
+static ssize_t aspeed_smc_write_user(struct spi_nor *nor, loff_t to, size_t len,
+				  const u_char *write_buf)
 {
 	struct aspeed_smc_chip *chip = nor->priv;
 
 	aspeed_smc_start_user(nor);
 	aspeed_smc_send_cmd_addr(nor, nor->program_opcode, to);
 	aspeed_smc_to_fifo(chip->base, write_buf, len);
-	*retlen += len;
 	aspeed_smc_stop_user(nor);
+
+	return len;
 }
 
 static int aspeed_smc_remove(struct platform_device *dev)
