@@ -14,6 +14,8 @@
 #include "../core.h"
 #include "pinctrl-aspeed.h"
 
+const char *const aspeed_pinmux_ips[] = { "SCU", "SIO", "GFX", "LPC" };
+
 int aspeed_pinctrl_get_groups_count(struct pinctrl_dev *pctldev)
 {
 	struct aspeed_pinctrl_data *pdata = pinctrl_dev_get_drvdata(pctldev);
@@ -78,7 +80,9 @@ int aspeed_pinmux_get_fn_groups(struct pinctrl_dev *pctldev,
 static inline void aspeed_sig_desc_print_val(
 		const struct aspeed_sig_desc *desc, bool enable, u32 rv)
 {
-	pr_debug("SCU%x[0x%08x]=0x%x, got 0x%x from 0x%08x\n", desc->reg,
+	pr_debug("Want %s%lX[0x%08X]=0x%X, got 0x%X from 0x%08X\n",
+			aspeed_pinmux_ips[SIG_DESC_IP_FROM_REG(desc->reg)],
+			SIG_DESC_OFFSET_FROM_REG(desc->reg),
 			desc->mask, enable ? desc->enable : desc->disable,
 			(rv & desc->mask) >> __ffs(desc->mask), rv);
 }
@@ -104,6 +108,8 @@ static bool aspeed_sig_desc_eval(const struct aspeed_sig_desc *desc,
 {
 	unsigned int raw;
 	u32 want;
+
+	WARN_ON(SIG_DESC_IP_FROM_REG(desc->reg) != ASPEED_PINMUX_IP_SCU);
 
 	if (regmap_read(map, desc->reg, &raw) < 0)
 		return false;
@@ -142,9 +148,19 @@ static bool aspeed_sig_expr_eval(const struct aspeed_sig_expr *expr,
 
 	for (i = 0; i < expr->ndescs; i++) {
 		const struct aspeed_sig_desc *desc = &expr->descs[i];
+		size_t ip = SIG_DESC_IP_FROM_REG(desc->reg);
 
-		if (!aspeed_sig_desc_eval(desc, enabled, map))
-			return false;
+		if (ip == ASPEED_PINMUX_IP_SCU) {
+			if (!aspeed_sig_desc_eval(desc, enabled, map))
+				return false;
+		} else {
+			size_t offset = SIG_DESC_OFFSET_FROM_REG(desc->reg);
+			const char *ip_name = aspeed_pinmux_ips[ip];
+
+			pr_debug("Ignoring configuration of field (%s%X & 0x%08X)\n",
+				 ip_name, offset, desc->mask);
+		}
+
 	}
 
 	return true;
@@ -170,7 +186,14 @@ static bool aspeed_sig_expr_set(const struct aspeed_sig_expr *expr,
 	for (i = 0; i < expr->ndescs; i++) {
 		bool ret;
 		const struct aspeed_sig_desc *desc = &expr->descs[i];
+
+		size_t offset = SIG_DESC_OFFSET_FROM_REG(desc->reg);
+		size_t ip = SIG_DESC_IP_FROM_REG(desc->reg);
+		bool is_scu = (ip == ASPEED_PINMUX_IP_SCU);
+		const char *ip_name = aspeed_pinmux_ips[ip];
+
 		u32 pattern = enable ? desc->enable : desc->disable;
+		u32 val = (pattern << __ffs(desc->mask));
 
 		/*
 		 * Strap registers are configured in hardware or by early-boot
@@ -179,14 +202,30 @@ static bool aspeed_sig_expr_set(const struct aspeed_sig_expr *expr,
 		 * deconfigured and is the reason we re-evaluate after writing
 		 * all descriptor bits.
 		 */
-		if (desc->reg == HW_STRAP1 || desc->reg == HW_STRAP2)
+		if (is_scu && (offset == HW_STRAP1 || offset == HW_STRAP2))
 			continue;
 
-		ret = regmap_update_bits(map, desc->reg, desc->mask,
-				pattern << __ffs(desc->mask)) == 0;
+		/*
+		 * Sometimes we need help from IP outside the SCU to activate a
+		 * mux request. Report that we need its cooperation.
+		 */
+		if (enable && !is_scu) {
+			pr_debug("Pinmux request for %s requires cooperation of %s IP: Need (%s%X & 0x%08X) = 0x%08X\n",
+				expr->function, ip_name, ip_name, offset,
+				desc->mask, val);
+		}
+
+		/* And only read/write SCU registers */
+		if (!is_scu) {
+			pr_debug("Skipping configuration of field (%s%X & 0x%08X)\n",
+					ip_name, offset, desc->mask);
+			continue;
+		}
+
+		ret = regmap_update_bits(map, desc->reg, desc->mask, val) == 0;
 
 		if (!ret)
-			return ret;
+			return false;
 	}
 
 	return aspeed_sig_expr_eval(expr, enable, map);
@@ -348,6 +387,8 @@ int aspeed_pinmux_set_mux(struct pinctrl_dev *pctldev, unsigned int function,
 		const struct aspeed_sig_expr *expr = NULL;
 		const struct aspeed_sig_expr **funcs;
 		const struct aspeed_sig_expr ***prios;
+
+		pr_debug("Muxing pin %d for %s\n", pin, pfunc->name);
 
 		if (!pdesc)
 			return -EINVAL;
