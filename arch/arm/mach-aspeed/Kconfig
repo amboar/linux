@@ -7,6 +7,7 @@ menuconfig ARCH_ASPEED
 	select MOXART_TIMER
 	select PINCTRL
 	select GPIOLIB
+	select GPIOLIB_IRQCHIP
 	select GPIO_ASPEED
 	select GPIO_SYSFS
 
