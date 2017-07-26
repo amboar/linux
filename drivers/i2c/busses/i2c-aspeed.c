@@ -184,8 +184,10 @@ static int aspeed_i2c_recover_bus(struct aspeed_i2c_bus *bus)
 			goto reset_out;
 		/* Recovery failed. */
 		else if (!(readl(bus->base + ASPEED_I2C_CMD_REG) &
-			   ASPEED_I2CD_SCL_LINE_STS))
+			   ASPEED_I2CD_SCL_LINE_STS)) {
+			printk("%s:%d: EIO!\n", __func__, __LINE__);
 			ret = -EIO;
+		}
 	/* Bus error. */
 	} else {
 		dev_dbg(bus->dev, "bus hung (state %x), attempting recovery\n",
@@ -206,8 +208,10 @@ static int aspeed_i2c_recover_bus(struct aspeed_i2c_bus *bus)
 			goto reset_out;
 		/* Recovery failed. */
 		else if (!(readl(bus->base + ASPEED_I2C_CMD_REG) &
-			   ASPEED_I2CD_SDA_LINE_STS))
+			   ASPEED_I2CD_SDA_LINE_STS)) {
+			printk("%s:%d: EIO!\n", __func__, __LINE__);
 			ret = -EIO;
+		}
 	}
 
 out:
@@ -386,6 +390,7 @@ static bool aspeed_i2c_master_irq(struct aspeed_i2c_bus *bus)
 	    (!bus->msgs && bus->master_state != ASPEED_I2C_MASTER_STOP)) {
 		dev_dbg(bus->dev, "received error interrupt: 0x%08x",
 			irq_status);
+		printk("%s:%d: EIO!\n", __func__, __LINE__);
 		bus->cmd_err = -EIO;
 		__aspeed_i2c_do_stop(bus);
 		goto out_no_complete;
@@ -415,6 +420,9 @@ static bool aspeed_i2c_master_irq(struct aspeed_i2c_bus *bus)
 	case ASPEED_I2C_MASTER_TX:
 		if (unlikely(irq_status & ASPEED_I2CD_INTR_TX_NAK)) {
 			dev_dbg(bus->dev, "slave NACKed TX");
+			printk("%s:%d: bus->msgs_index: %d, bus->buf_index: %d\n",
+					__func__, __LINE__, bus->msgs_index,
+					bus->buf_index);
 			status_ack |= ASPEED_I2CD_INTR_TX_NAK;
 			goto error_and_stop;
 		} else if (unlikely(!(irq_status & ASPEED_I2CD_INTR_TX_ACK))) {
@@ -473,6 +481,7 @@ static bool aspeed_i2c_master_irq(struct aspeed_i2c_bus *bus)
 	case ASPEED_I2C_MASTER_STOP:
 		if (unlikely(!(irq_status & ASPEED_I2CD_INTR_NORMAL_STOP))) {
 			dev_err(bus->dev, "master failed to STOP");
+			printk("%s:%d: EIO!\n", __func__, __LINE__);
 			bus->cmd_err = -EIO;
 			/* Do not STOP as we have already tried. */
 		} else {
@@ -485,16 +494,19 @@ static bool aspeed_i2c_master_irq(struct aspeed_i2c_bus *bus)
 		dev_err(bus->dev,
 			"master received interrupt 0x%08x, but is inactive",
 			irq_status);
+		printk("%s:%d: EIO!\n", __func__, __LINE__);
 		bus->cmd_err = -EIO;
 		/* Do not STOP as we should be inactive. */
 		goto out_complete;
 	default:
 		WARN(1, "unknown master state\n");
 		bus->master_state = ASPEED_I2C_MASTER_INACTIVE;
+		printk("%s:%d: EIO!\n", __func__, __LINE__);
 		bus->cmd_err = -EIO;
 		goto out_complete;
 	}
 error_and_stop:
+	printk("%s:%d: EIO!\n", __func__, __LINE__);
 	bus->cmd_err = -EIO;
 	__aspeed_i2c_do_stop(bus);
 	goto out_no_complete;

@@ -157,9 +157,11 @@ int pmbus_set_page(struct i2c_client *client, u8 page)
 	if (page != data->currpage) {
 		rv = i2c_smbus_write_byte_data(client, PMBUS_PAGE, page);
 		newpage = i2c_smbus_read_byte_data(client, PMBUS_PAGE);
-		if (newpage != page)
+		if (newpage != page) {
+			printk("%s:%d: set page operation failed: %d != %d\n",
+					__func__, __LINE__, page, newpage);
 			rv = -EIO;
-		else
+		} else
 			data->currpage = page;
 	}
 	return rv;
@@ -210,6 +212,8 @@ int pmbus_write_word_data(struct i2c_client *client, u8 page, u8 reg, u16 word)
 }
 EXPORT_SYMBOL_GPL(pmbus_write_word_data);
 
+static int pmbus_check_status_cml(struct i2c_client *client);
+
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
 			       u8 config, u8 mask, u16 command)
 {
@@ -218,6 +222,8 @@ int pmbus_update_fan(struct i2c_client *client, int page, int id,
 
 	from = pmbus_read_byte_data(client, page,
 				    pmbus_fan_config_registers[id]);
+	if (from == -EIO)
+		printk("%s:%d: pmbus_read_byte_data: %d\n", __func__, __LINE__, from);
 	if (from < 0)
 		return from;
 
@@ -225,11 +231,22 @@ int pmbus_update_fan(struct i2c_client *client, int page, int id,
 
 	rv = pmbus_write_byte_data(client, page,
 				   pmbus_fan_config_registers[id], to);
+	if (rv == -EIO)
+		printk("%s:%d: pmbus_write_byte_data: %d\n", __func__, __LINE__, rv);
 	if (rv < 0)
 		return rv;
 
-	return pmbus_write_word_data(client, page,
+	rv = pmbus_write_word_data(client, page,
 				     pmbus_fan_command_registers[id], command);
+	if (rv == -EIO) {
+		printk("%s:%d: pmbus_write_word_data: %d\n", __func__, __LINE__, rv);
+		rv = pmbus_check_status_cml(client);
+		printk("%s;%d: pmbus_check_status_cml: %d\n", __func__, __LINE__, rv);
+		rv = pmbus_write_word_data(client, page,
+				pmbus_fan_command_registers[id], command);
+		printk("%s:%d: Retry pmbus_write_word_data: %d\n", __func__, __LINE__, rv);
+	}
+	return rv;
 }
 EXPORT_SYMBOL_GPL(pmbus_update_fan);
 
@@ -461,10 +478,13 @@ static int pmbus_check_status_cml(struct i2c_client *client)
 	int status, status2;
 
 	status = _pmbus_read_byte_data(client, -1, data->status_register);
+	printk("%s:%d: status: 0x%02x\n", __func__, __LINE__, status);
 	if (status < 0 || (status & PB_STATUS_CML)) {
 		status2 = _pmbus_read_byte_data(client, -1, PMBUS_STATUS_CML);
-		if (status2 < 0 || (status2 & PB_CML_FAULT_INVALID_COMMAND))
+		printk("%s:%d: status2: 0x%02x\n", __func__, __LINE__, status2);
+		if (status2 < 0 || (status2 & PB_CML_FAULT_INVALID_COMMAND)) {
 			return -EIO;
+		}
 	}
 	return 0;
 }
