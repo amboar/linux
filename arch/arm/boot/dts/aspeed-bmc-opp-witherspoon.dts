@@ -176,12 +176,13 @@
 		status = "okay";
 		m25p,fast-read;
 
-#include "aspeed-bmc-opp-flash-layout.dtsi"
+#include "aspeed-bmc-opp-flash-layout-ubi.dtsi"
 	};
 	flash@1 {
 		status = "okay";
-		label = "alt";
 		m25p,fast-read;
+
+#include "aspeed-bmc-alt-opp-flash-layout-ubi.dtsi"
 	};
 };
 
