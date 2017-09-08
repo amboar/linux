@@ -142,12 +142,9 @@
 			maxim,fan-ramp = <2>;
 			maxim,fan-fault-pin-mon;
 		};
-
-		temp@6 {
-			compatible = "pmbus-temperature";
-			reg = <6>;
-			maxim,tmp-offset = <0>;
-			maxim,tmp-fans = <&fan3>;
-		};
 	};
+};
+
+&wdt2 {
+	status = "okay";
 };
