@@ -172,13 +172,17 @@ int pmbus_set_page(struct i2c_client *client, int page)
 	int newpage;
 
 	if (page >= 0 && page != data->currpage) {
+		return 0;
+
+	if (!(data->info->func[page] & PMBUS_PAGE_VIRTUAL)) {
 		rv = i2c_smbus_write_byte_data(client, PMBUS_PAGE, page);
 		newpage = i2c_smbus_read_byte_data(client, PMBUS_PAGE);
 		if (newpage != page)
-			rv = -EIO;
-		else
-			data->currpage = page;
+			return -EIO;
 	}
+
+	data->currpage = page;
+
 	return rv;
 }
 EXPORT_SYMBOL_GPL(pmbus_set_page);
