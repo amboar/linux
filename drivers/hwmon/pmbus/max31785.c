@@ -18,7 +18,78 @@ enum max31785_regs {
 	MFR_REVISION		= 0x9b,
 };
 
+#define MAX31785			0x3030
+#define MAX31785A			0x3040
+
+#define MAX31785_CAP_READ_DUAL_TACH	BIT(0)
+
 #define MAX31785_NR_PAGES		23
+
+static int max31785_read_byte_data(struct i2c_client *client, int page,
+				   int reg)
+{
+	switch (reg) {
+	case PMBUS_VOUT_MODE:
+		if (page < MAX31785_NR_PAGES)
+			return -ENODATA;
+
+		return -ENOTSUPP;
+	case PMBUS_FAN_CONFIG_12:
+		if (page < MAX31785_NR_PAGES)
+			return -ENODATA;
+
+		return pmbus_read_byte_data(client, page - MAX31785_NR_PAGES,
+					    reg);
+	}
+
+	return -ENODATA;
+}
+
+static int max31785_write_byte(struct i2c_client *client, int page, u8 value)
+{
+	if (page < MAX31785_NR_PAGES)
+		return -ENODATA;
+
+	return -ENOTSUPP;
+}
+
+static int max31785_read_long_data(struct i2c_client *client, int page,
+				   int reg, u32 *data)
+{
+	unsigned char cmdbuf[1];
+	unsigned char rspbuf[4];
+	int rc;
+
+	struct i2c_msg msg[2] = {
+		{
+			.addr = client->addr,
+			.flags = 0,
+			.len = sizeof(cmdbuf),
+			.buf = cmdbuf,
+		},
+		{
+			.addr = client->addr,
+			.flags = I2C_M_RD,
+			.len = sizeof(rspbuf),
+			.buf = rspbuf,
+		},
+	};
+
+	cmdbuf[0] = reg;
+
+	rc = pmbus_set_page(client, page);
+	if (rc < 0)
+		return rc;
+
+	rc = i2c_transfer(client->adapter, msg, ARRAY_SIZE(msg));
+	if (rc < 0)
+		return rc;
+
+	*data = (rspbuf[0] << (0 * 8)) | (rspbuf[1] << (1 * 8)) |
+		(rspbuf[2] << (2 * 8)) | (rspbuf[3] << (3 * 8));
+
+	return rc;
+}
 
 static int max31785_get_pwm(struct i2c_client *client, int page)
 {
@@ -76,7 +147,25 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 	int rv;
 
 	switch (reg) {
+	case PMBUS_READ_FAN_SPEED_1:
+	{
+		u32 val;
+
+		if (page < MAX31785_NR_PAGES)
+			return -ENODATA;
+
+		rv = max31785_read_long_data(client, page - MAX31785_NR_PAGES,
+					     reg, &val);
+		if (rv < 0)
+			return rv;
+
+		rv = (val >> 16) & 0xffff;
+		break;
+	}
 	case PMBUS_VIRT_PWM_1:
+		if (page >= MAX31785_NR_PAGES)
+			return -ENOTSUPP;
+
 		rv = max31785_get_pwm(client, page);
 		if (rv < 0)
 			return rv;
@@ -85,10 +174,13 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 		rv /= 100;
 		break;
 	case PMBUS_VIRT_PWM_ENABLE_1:
+		if (page >= MAX31785_NR_PAGES)
+			return -ENOTSUPP;
+
 		rv = max31785_get_pwm_mode(client, page);
 		break;
 	default:
-		rv = -ENODATA;
+		rv = (page >= MAX31785_NR_PAGES) ? -ENXIO : -ENODATA;
 		break;
 	}
 
@@ -100,6 +192,9 @@ static const int max31785_pwm_modes[] = { 0x7fff, 0x2710, 0xffff };
 static int max31785_write_word_data(struct i2c_client *client, int page,
 				    int reg, u16 word)
 {
+	if (page >= MAX31785_NR_PAGES)
+		return -ENXIO;
+
 	switch (reg) {
 	case PMBUS_VIRT_PWM_ENABLE_1:
 		if (word >= ARRAY_SIZE(max31785_pwm_modes))
@@ -127,7 +222,9 @@ static const struct pmbus_driver_info max31785_info = {
 	.pages = MAX31785_NR_PAGES,
 
 	.write_word_data = max31785_write_word_data,
+	.read_byte_data = max31785_read_byte_data,
 	.read_word_data = max31785_read_word_data,
+	.write_byte = max31785_write_byte,
 
 	/* RPM */
 	.format[PSC_FAN] = direct,
