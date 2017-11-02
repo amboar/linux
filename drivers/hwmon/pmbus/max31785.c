@@ -276,6 +276,7 @@ static int max31785_probe(struct i2c_client *client,
 {
 	struct device *dev = &client->dev;
 	struct pmbus_driver_info *info;
+	u32 caps;
 	s64 ret;
 
 	info = devm_kzalloc(dev, sizeof(struct pmbus_driver_info), GFP_KERNEL);
@@ -287,6 +288,19 @@ static int max31785_probe(struct i2c_client *client,
 	ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, 255);
 	if (ret < 0)
 		return ret;
+
+	caps = 0;
+	if (!strcmp("max31785a", id->name)) {
+		if (ret == MAX31785A)
+			caps |= MAX31785_CAP_READ_DUAL_TACH;
+		else
+			dev_warn(dev, "Expected max3175a, found max31785: cannot provide secondary tachometer readings\n");
+	} else if (!strcmp("max31785", id->name)) {
+		if (ret == MAX31785A)
+			dev_info(dev, "Expected max31785, found max3175a: suppressing secondary tachometer attributes\n");
+	} else {
+		return -EINVAL;
+	}
 
 	return pmbus_do_probe(client, id, info);
 }
