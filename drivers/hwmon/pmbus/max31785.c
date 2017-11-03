@@ -20,8 +20,102 @@ enum max31785_regs {
 
 #define MAX31785_NR_PAGES		23
 
+static int max31785_get_pwm(struct i2c_client *client, int page)
+{
+	int config;
+	int command;
+
+	config = pmbus_read_byte_data(client, page, PMBUS_FAN_CONFIG_12);
+	if (config < 0)
+		return config;
+
+	command = pmbus_read_word_data(client, page, PMBUS_FAN_COMMAND_1);
+	if (command < 0)
+		return command;
+
+	if (!(config & PB_FAN_1_RPM)) {
+		if (command >= 0x8000)
+			return 0;
+		else if (command >= 0x2711)
+			return 0x2710;
+
+		return command;
+	}
+
+	return 0;
+}
+
+static int max31785_get_pwm_mode(struct i2c_client *client, int page)
+{
+	int config;
+	int command;
+
+	config = pmbus_read_byte_data(client, page, PMBUS_FAN_CONFIG_12);
+	if (config < 0)
+		return config;
+
+	command = pmbus_read_word_data(client, page, PMBUS_FAN_COMMAND_1);
+	if (command < 0)
+		return command;
+
+	if (!(config & PB_FAN_1_RPM)) {
+		if (command >= 0x8000)
+			return 2;
+		else if (command >= 0x2711)
+			return 0;
+
+		return 1;
+	}
+
+	return (command >= 0x8000) ? 2 : 1;
+}
+
+static int max31785_read_word_data(struct i2c_client *client, int page,
+				   int reg)
+{
+	int rv;
+
+	switch (reg) {
+	case PMBUS_VIRT_PWM_1:
+		rv = max31785_get_pwm(client, page);
+		if (rv < 0)
+			return rv;
+
+		rv *= 255;
+		rv /= 100;
+		break;
+	case PMBUS_VIRT_PWM_ENABLE_1:
+		rv = max31785_get_pwm_mode(client, page);
+		break;
+	default:
+		rv = -ENODATA;
+		break;
+	}
+
+	return rv;
+}
+
+static const int max31785_pwm_modes[] = { 0x7fff, 0x2710, 0xffff };
+
+static int max31785_write_word_data(struct i2c_client *client, int page,
+				    int reg, u16 word)
+{
+	switch (reg) {
+	case PMBUS_VIRT_PWM_ENABLE_1:
+		if (word >= ARRAY_SIZE(max31785_pwm_modes))
+			return -EINVAL;
+
+		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
+					max31785_pwm_modes[word]);
+	default:
+		break;
+	}
+
+	return -ENODATA;
+}
+
 #define MAX31785_FAN_FUNCS \
-	(PMBUS_HAVE_FAN12 | PMBUS_HAVE_STATUS_FAN12)
+	(PMBUS_HAVE_FAN12 | PMBUS_HAVE_STATUS_FAN12 | PMBUS_HAVE_PWM12)
 
 #define MAX31785_TEMP_FUNCS \
 	(PMBUS_HAVE_TEMP | PMBUS_HAVE_STATUS_TEMP)
@@ -32,11 +126,19 @@ enum max31785_regs {
 static const struct pmbus_driver_info max31785_info = {
 	.pages = MAX31785_NR_PAGES,
 
+	.write_word_data = max31785_write_word_data,
+	.read_word_data = max31785_read_word_data,
+
 	/* RPM */
 	.format[PSC_FAN] = direct,
 	.m[PSC_FAN] = 1,
 	.b[PSC_FAN] = 0,
 	.R[PSC_FAN] = 0,
+	/* PWM */
+	.format[PSC_PWM] = direct,
+	.m[PSC_PWM] = 1,
+	.b[PSC_PWM] = 0,
+	.R[PSC_PWM] = 2,
 	.func[0] = MAX31785_FAN_FUNCS,
 	.func[1] = MAX31785_FAN_FUNCS,
 	.func[2] = MAX31785_FAN_FUNCS,
