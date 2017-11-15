@@ -300,8 +300,8 @@ int pmbus_read_word_data(struct i2c_client *client, int page, u8 reg)
 }
 EXPORT_SYMBOL_GPL(pmbus_read_word_data);
 
-static int pmbus_get_fan_command(struct i2c_client *client, int page, int id,
-				 enum pmbus_fan_mode mode);
+static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
+			      enum pmbus_fan_mode mode);
 
 static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg,
 			       u16 word)
@@ -311,7 +311,7 @@ static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg,
 	switch (reg) {
 		case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
 			id = reg - PMBUS_VIRT_FAN_TARGET_1;
-			status = pmbus_get_fan_command(client, page, id, rpm);
+			status = pmbus_get_fan_rate(client, page, id, rpm);
 			break;
 		default:
 			status = -ENXIO;
@@ -405,8 +405,8 @@ static int _pmbus_read_byte_data(struct i2c_client *client, int page, int reg)
 	return pmbus_read_byte_data(client, page, reg);
 }
 
-static int pmbus_get_fan_command(struct i2c_client *client, int page, int id,
-				 enum pmbus_fan_mode mode)
+static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
+			      enum pmbus_fan_mode mode)
 {
 	int config;
 
