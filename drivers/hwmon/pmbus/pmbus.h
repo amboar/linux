@@ -250,6 +250,8 @@ enum pmbus_regs {
 #define PB_FAN_1_RPM			BIT(6)
 #define PB_FAN_1_INSTALLED		BIT(7)
 
+#define PB_FAN_12_RPM			(PB_FAN_1_RPM | PB_FAN_2_RPM)
+
 enum pmbus_fan_mode { percent = 0, rpm };
 
 /*
