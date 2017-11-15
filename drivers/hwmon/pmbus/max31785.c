@@ -312,8 +312,7 @@ static int max31785_probe(struct i2c_client *client,
 
 	if (!i2c_check_functionality(client->adapter,
 				     I2C_FUNC_SMBUS_BYTE_DATA |
-				     I2C_FUNC_SMBUS_WORD_DATA |
-				     I2C_FUNC_SMBUS_BLOCK_DATA))
+				     I2C_FUNC_SMBUS_WORD_DATA))
 		return -ENODEV;
 
 	info = devm_kzalloc(dev, sizeof(struct pmbus_driver_info), GFP_KERNEL);
