@@ -200,6 +200,10 @@ enum pmbus_regs {
 	 *
 	 * pmbus core provides a default implementation for
 	 * PMBUS_VIRT_FAN_TARGET_[1-4].
+	 *
+	 * TARGET, PWM and PWM_ENABLE members must be defined sequentially;
+	 * pmbus core uses the difference between the provided register and
+	 * it's _1 counterpart to calculate the FAN/PWM ID.
 	 */
 	PMBUS_VIRT_FAN_TARGET_1,
 	PMBUS_VIRT_FAN_TARGET_2,
