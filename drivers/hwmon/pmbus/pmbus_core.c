@@ -220,7 +220,7 @@ int pmbus_write_word_data(struct i2c_client *client, int page, u8 reg,
 EXPORT_SYMBOL_GPL(pmbus_write_word_data);
 
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
-			       u8 config, u8 mask, u16 command)
+	             u8 config, u8 mask, u16 command)
 {
 	int from, rv;
 	u8 to;
