@@ -244,6 +244,27 @@ int pmbus_update_fan(struct i2c_client *client, int page, int id,
 }
 EXPORT_SYMBOL_GPL(pmbus_update_fan);
 
+static int pmbus_write_virt_reg(struct i2c_client *client, int page, int reg,
+				u16 word)
+{
+	int status;
+	int bit;
+	int id;
+
+	switch (reg) {
+	case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
+		id = reg - PMBUS_VIRT_FAN_TARGET_1;
+		bit = pmbus_fan_rpm_mask[id];
+		status = pmbus_update_fan(client, page, id, bit, bit, word);
+		break;
+	default:
+		status = -ENXIO;
+		break;
+	}
+
+	return status;
+}
+
 /*
  * _pmbus_write_word_data() is similar to pmbus_write_word_data(), but checks if
  * a device specific mapping function exists and calls it if necessary.
@@ -260,40 +281,10 @@ static int _pmbus_write_word_data(struct i2c_client *client, int page, int reg,
 		if (status != -ENODATA)
 			return status;
 	}
-	if (reg >= PMBUS_VIRT_BASE) {
-		int id, bit;
 
-		switch (reg) {
-		case PMBUS_VIRT_FAN_TARGET_1:
-		case PMBUS_VIRT_FAN_TARGET_2:
-		case PMBUS_VIRT_FAN_TARGET_3:
-		case PMBUS_VIRT_FAN_TARGET_4:
-			id = reg - PMBUS_VIRT_FAN_TARGET_1;
-			bit = pmbus_fan_rpm_mask[id];
-			status = pmbus_update_fan(client, page, id, bit, bit,
-						  word);
-			break;
-		case PMBUS_VIRT_PWM_1:
-		case PMBUS_VIRT_PWM_2:
-		case PMBUS_VIRT_PWM_3:
-		case PMBUS_VIRT_PWM_4:
-		{
-			u32 command = word;
+	if (reg >= PMBUS_VIRT_BASE)
+		return pmbus_write_virt_reg(client, page, reg, word);
 
-			id = reg - PMBUS_VIRT_PWM_1;
-			bit = pmbus_fan_rpm_mask[id];
-			command *= 100;
-			command /= 255;
-			status = pmbus_update_fan(client, page, id, 0, bit,
-						  command);
-			break;
-		}
-		default:
-			status = -ENXIO;
-			break;
-		}
-		return status;
-	}
 	return pmbus_write_word_data(client, page, reg, word);
 }
 
@@ -312,6 +303,25 @@ EXPORT_SYMBOL_GPL(pmbus_read_word_data);
 static int pmbus_get_fan_command(struct i2c_client *client, int page, int id,
 				 enum pmbus_fan_mode mode);
 
+static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg,
+			       u16 word)
+{
+	int id;
+
+	switch (reg) {
+		case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
+			id = reg - PMBUS_VIRT_FAN_TARGET_1;
+			status = pmbus_get_fan_command(client, page, id, rpm);
+			break;
+		default:
+			status = -ENXIO;
+			break;
+	}
+
+	return status;
+
+}
+
 /*
  * _pmbus_read_word_data() is similar to pmbus_read_word_data(), but checks if
  * a device specific mapping function exists and calls it if necessary.
@@ -327,42 +337,10 @@ static int _pmbus_read_word_data(struct i2c_client *client, int page, int reg)
 		if (status != -ENODATA)
 			return status;
 	}
-	if (reg >= PMBUS_VIRT_BASE) {
-		int id;
 
-		switch (reg) {
-		case PMBUS_VIRT_FAN_TARGET_1:
-		case PMBUS_VIRT_FAN_TARGET_2:
-		case PMBUS_VIRT_FAN_TARGET_3:
-		case PMBUS_VIRT_FAN_TARGET_4:
-			id = reg - PMBUS_VIRT_FAN_TARGET_1;
-			status = pmbus_get_fan_command(client, page, id, rpm);
-			break;
-		case PMBUS_VIRT_PWM_1:
-		case PMBUS_VIRT_PWM_2:
-		case PMBUS_VIRT_PWM_3:
-		case PMBUS_VIRT_PWM_4:
-		{
-			int rv;
+	if (reg >= PMBUS_VIRT_BASE)
+		return pmbus_read_virt_reg(client, page, reg);
 
-			id = reg - PMBUS_VIRT_PWM_1;
-			rv = pmbus_get_fan_command(client, page, id, percent);
-			if (rv < 0)
-				return rv;
-
-			rv *= 255;
-			rv /= 100;
-
-			status = rv;
-			break;
-		}
-		default:
-			status = -ENXIO;
-			break;
-		}
-
-		return status;
-	}
 	return pmbus_read_word_data(client, page, reg);
 }
 
