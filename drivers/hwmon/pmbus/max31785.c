@@ -25,6 +25,7 @@ enum max31785_regs {
 #define MFR_FAN_CONFIG_DUAL_TACH	BIT(12)
 
 #define MAX31785_NR_PAGES		23
+#define MAX31785_NR_FAN_PAGES		6
 
 static int max31785_read_byte_data(struct i2c_client *client, int page,
 				   int reg)
@@ -219,6 +220,8 @@ static int max31785_write_word_data(struct i2c_client *client, int page,
 #define MAX31785_VOUT_FUNCS \
 	(PMBUS_HAVE_VOUT | PMBUS_HAVE_STATUS_VOUT)
 
+#define MAX37185_NUM_FAN_PAGES 6
+
 static const struct pmbus_driver_info max31785_info = {
 	.pages = MAX31785_NR_PAGES,
 
@@ -272,35 +275,13 @@ static const struct pmbus_driver_info max31785_info = {
 	.func[22] = MAX31785_VOUT_FUNCS,
 };
 
-static int max31785_configure(struct i2c_client *client,
-			      const struct i2c_device_id *id,
-			      struct pmbus_driver_info *info)
+static int max31785_configure_dual_tach(struct i2c_client *client,
+					struct pmbus_driver_info *info)
 {
-	struct device *dev = &client->dev;
-	bool dual_tach = false;
 	int ret;
 	int i;
 
-	ret = i2c_smbus_read_word_data(client, MFR_REVISION);
-	if (ret < 0)
-		return ret;
-
-	if (!strcmp("max31785a", id->name)) {
-		if (ret == MAX31785A)
-			dual_tach = true;
-		else
-			dev_warn(dev, "Expected max3175a, found max31785: cannot provide secondary tachometer readings\n");
-	} else if (!strcmp("max31785", id->name)) {
-		if (ret == MAX31785A)
-			dev_info(dev, "Expected max31785, found max3175a: suppressing secondary tachometer attributes\n");
-	} else {
-		return -EINVAL;
-	}
-
-	if (!dual_tach)
-		return 0;
-
-	for (i = 0; i <= 5; i++) {
+	for (i = 0; i < MAX31785_NR_FAN_PAGES; i++) {
 		ret = i2c_smbus_write_byte_data(client, PMBUS_PAGE, i);
 		if (ret < 0)
 			return ret;
@@ -326,6 +307,7 @@ static int max31785_probe(struct i2c_client *client,
 {
 	struct device *dev = &client->dev;
 	struct pmbus_driver_info *info;
+	bool dual_tach = false;
 	s64 ret;
 
 	if (!i2c_check_functionality(client->adapter,
@@ -344,9 +326,24 @@ static int max31785_probe(struct i2c_client *client,
 	if (ret < 0)
 		return ret;
 
-	ret = max31785_configure(client, id, info);
+	ret = i2c_smbus_read_word_data(client, MFR_REVISION);
 	if (ret < 0)
 		return ret;
+
+	if (ret == MAX31785A) {
+		dual_tach = true;
+	} else if (ret == MAX31785) {
+		if (!strcmp("max31785a", id->name))
+			dev_warn(dev, "Expected max3175a, found max31785: cannot provide secondary tachometer readings\n");
+	} else {
+		return -ENODEV;
+	}
+
+	if (dual_tach) {
+		ret = max31785_configure_dual_tach(client, info);
+		if (ret < 0)
+			return ret;
+	}
 
 	return pmbus_do_probe(client, id, info);
 }
