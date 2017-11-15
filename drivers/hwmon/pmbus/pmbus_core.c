@@ -1034,7 +1034,8 @@ static struct pmbus_sensor *pmbus_add_sensor(struct pmbus_data *data,
 					     const char *name, const char *type,
 					     int seq, int page, int reg,
 					     enum pmbus_sensor_classes class,
-					     bool update, bool readonly)
+					     bool update, bool readonly,
+					     bool convert)
 {
 	struct pmbus_sensor *sensor;
 	struct device_attribute *a;
@@ -1055,7 +1056,7 @@ static struct pmbus_sensor *pmbus_add_sensor(struct pmbus_data *data,
 	sensor->reg = reg;
 	sensor->class = class;
 	sensor->update = update;
-	sensor->convert = true;
+	sensor->convert = convert;
 	pmbus_dev_attr_init(a, sensor->name,
 			    readonly ? S_IRUGO : S_IRUGO | S_IWUSR,
 			    pmbus_show_sensor, pmbus_set_sensor);
@@ -1154,7 +1155,7 @@ static int pmbus_add_limit_attrs(struct i2c_client *client,
 			curr = pmbus_add_sensor(data, name, l->attr, index,
 						page, l->reg, attr->class,
 						attr->update || l->update,
-						false);
+						false, true);
 			if (!curr)
 				return -ENOMEM;
 			if (l->sbit && (info->func[page] & attr->sfunc)) {
@@ -1193,7 +1194,7 @@ static int pmbus_add_sensor_attrs_one(struct i2c_client *client,
 			return ret;
 	}
 	base = pmbus_add_sensor(data, name, "input", index, page, attr->reg,
-				attr->class, true, true);
+				attr->class, true, true, true);
 	if (!base)
 		return -ENOMEM;
 	if (attr->sfunc) {
@@ -1753,7 +1754,7 @@ static int pmbus_add_fan_ctrl(struct i2c_client *client,
 
 	sensor = pmbus_add_sensor(data, "fan", "target", index, page,
 				  PMBUS_VIRT_FAN_TARGET_1 + id, PSC_FAN,
-				  true, false);
+				  true, false, true);
 
 	if (!sensor)
 		return -ENOMEM;
@@ -1764,19 +1765,17 @@ static int pmbus_add_fan_ctrl(struct i2c_client *client,
 
 	sensor = pmbus_add_sensor(data, "pwm", NULL, index, page,
 				  PMBUS_VIRT_PWM_1 + id, PSC_PWM,
-				  true, false);
+				  true, false, true);
 
 	if (!sensor)
 		return -ENOMEM;
 
 	sensor = pmbus_add_sensor(data, "pwm", "enable", index, page,
 				  PMBUS_VIRT_PWM_ENABLE_1 + id, PSC_PWM,
-				  true, false);
+				  true, false, false);
 
 	if (!sensor)
 		return -ENOMEM;
-
-	sensor->convert = false;
 
 	return 0;
 }
@@ -1815,7 +1814,7 @@ static int pmbus_add_fan_attributes(struct i2c_client *client,
 
 			if (pmbus_add_sensor(data, "fan", "input", index,
 					     page, pmbus_fan_registers[f],
-					     PSC_FAN, true, true) == NULL)
+					     PSC_FAN, true, true, true) == NULL)
 				return -ENOMEM;
 
 			/* Fan control */
