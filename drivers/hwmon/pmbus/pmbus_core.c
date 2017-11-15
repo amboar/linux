@@ -88,6 +88,14 @@ struct pmbus_label {
 #define to_pmbus_label(_attr) \
 	container_of(_attr, struct pmbus_label, attribute)
 
+struct pmbus_fan_target_cache {
+	struct pmbus_fan_target_cache *next;
+	int page;
+	int id;
+	int percent;
+	int rpm;
+};
+
 struct pmbus_data {
 	struct device *dev;
 	struct device *hwmon_dev;
@@ -121,6 +129,8 @@ struct pmbus_data {
 	int (*read_status)(struct i2c_client *client, int page);
 
 	u8 currpage;
+
+	struct pmbus_fan_target_cache *fan_target_cache;
 };
 
 struct pmbus_debugfs_entry {
@@ -219,19 +229,124 @@ int pmbus_write_word_data(struct i2c_client *client, int page, u8 reg,
 }
 EXPORT_SYMBOL_GPL(pmbus_write_word_data);
 
+static struct pmbus_fan_target_cache* pmbus_add_cached_fan_rate(
+		struct pmbus_data *data, int page, int id)
+{
+	struct pmbus_fan_target_cache *cache;
+
+	cache = kzalloc(sizeof(*cache), GFP_KERNEL);
+	if (!cache)
+		return NULL;
+
+	cache->next = data->fan_target_cache;
+	data->fan_target_cache = cache;
+
+	return cache;
+}
+
+static struct pmbus_fan_target_cache *pmbus_find_cached_fan_rate(
+		struct pmbus_data *data, int page, int id)
+{
+	struct pmbus_fan_target_cache *cache;
+
+	cache = data->fan_target_cache;
+	while(cache) {
+		if (cache->page == page && cache->id == id)
+			return cache;
+
+		cache = cache->next;
+	}
+
+	return NULL;
+}
+
+static int pmbus_get_cached_fan_rate(struct i2c_client *client, int page,
+				     int id, enum pmbus_fan_mode req_mode)
+{
+	struct pmbus_data *data = i2c_get_clientdata(client);
+	struct pmbus_fan_target_cache *cache;
+
+	cache = pmbus_find_cached_fan_rate(data, page, id);
+	if (!cache) {
+		enum pmbus_fan_mode dev_mode;
+		int rv;
+
+		cache = pmbus_add_cached_fan_rate(data, page, id);
+		if (!cache)
+			return -ENOMEM;
+
+		rv = pmbus_read_byte_data(client, page,
+					  pmbus_fan_config_registers[id]);
+		if (rv < 0)
+			return rv;
+
+		dev_mode = !!(rv & pmbus_fan_rpm_mask[id]);
+
+		rv = pmbus_read_word_data(client, page,
+					  pmbus_fan_command_registers[id]);
+		if (rv < 0)
+			return rv;
+
+		if (dev_mode == percent)
+			cache->percent = rv;
+		else
+			cache->rpm = rv;
+	}
+
+	if (req_mode == percent)
+		return cache->percent;
+
+	return cache->rpm;
+}
+
+static int pmbus_update_cached_fan_rate(struct i2c_client *client, int page,
+					int id, enum pmbus_fan_mode mode,
+					int rate)
+{
+	struct pmbus_data *data = i2c_get_clientdata(client);
+	struct pmbus_fan_target_cache *cache;
+
+	cache = pmbus_find_cached_fan_rate(data, page, id);
+	if (!cache) {
+		cache = pmbus_add_cached_fan_rate(data, page, id);
+		if (!cache)
+			return -ENOMEM;
+	}
+
+	if (mode == percent)
+		cache->percent = rate;
+	else
+		cache->rpm = rate;
+
+	return rate;
+}
+
+int pmbus_get_target_fan_rate(struct i2c_client *client, int page, int id,
+			      enum pmbus_fan_mode mode)
+{
+	/*
+	 * We can't meaningfully translate between PWM and RPM, so always
+	 * report a cached value instead.
+	 */
+	return pmbus_get_cached_fan_rate(client, page, id, mode);
+}
+EXPORT_SYMBOL_GPL(pmbus_get_target_fan_rate);
+
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
 	             u8 config, u8 mask, u16 command)
 {
-	int from, rv;
+	enum pmbus_fan_mode mode;
+	int from;
+	int rv;
 	u8 to;
 
+	/* Update fan configuration */
 	from = pmbus_read_byte_data(client, page,
 				    pmbus_fan_config_registers[id]);
 	if (from < 0)
 		return from;
 
 	to = (from & ~mask) | (config & mask);
-
 	if (to != from) {
 		rv = pmbus_write_byte_data(client, page,
 					   pmbus_fan_config_registers[id], to);
@@ -239,8 +354,26 @@ int pmbus_update_fan(struct i2c_client *client, int page, int id,
 			return rv;
 	}
 
-	return pmbus_write_word_data(client, page,
+	/* Update fan rate */
+	rv = pmbus_write_word_data(client, page,
 				     pmbus_fan_command_registers[id], command);
+	if (rv < 0)
+		return rv;
+
+	/*
+	 * Handle caching of the fan rate for the requested mode.
+	 *
+	 * This allows us to switch modes via the pwmX_enable attribute and
+	 * restore the last relevant value, and to display a "sensible" number
+	 * for the fanX_target and pwmX attributes when the fan isn't in the
+	 * relevant mode.
+	 */
+	if (!(mask & PB_FAN_12_RPM))
+		return 0;
+
+	mode = !!(config & PB_FAN_12_RPM);
+
+	return pmbus_update_cached_fan_rate(client, page, id, mode, command);
 }
 EXPORT_SYMBOL_GPL(pmbus_update_fan);
 
@@ -300,9 +433,6 @@ int pmbus_read_word_data(struct i2c_client *client, int page, u8 reg)
 }
 EXPORT_SYMBOL_GPL(pmbus_read_word_data);
 
-static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
-			      enum pmbus_fan_mode mode);
-
 static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg)
 {
 	int status;
@@ -311,7 +441,7 @@ static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg)
 	switch (reg) {
 		case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
 			id = reg - PMBUS_VIRT_FAN_TARGET_1;
-			status = pmbus_get_fan_rate(client, page, id, rpm);
+			status = pmbus_get_target_fan_rate(client, page, id, rpm);
 			break;
 		default:
 			status = -ENXIO;
@@ -403,28 +533,6 @@ static int _pmbus_read_byte_data(struct i2c_client *client, int page, int reg)
 			return status;
 	}
 	return pmbus_read_byte_data(client, page, reg);
-}
-
-static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
-			      enum pmbus_fan_mode mode)
-{
-	int config;
-
-	config = _pmbus_read_byte_data(client, page,
-				       pmbus_fan_config_registers[id]);
-	if (config < 0)
-		return config;
-
-	/*
-	 * We can't meaningfully translate between PWM and RPM, so if the
-	 * attribute mode (fan[1-*]_target is RPM, pwm[1-*] and pwm[1-*]_enable
-	 * are PWM) doesn't match the hardware mode, then report 0 instead.
-	 */
-	if ((mode == rpm) != (!!(config & pmbus_fan_rpm_mask[id])))
-		return 0;
-
-	return _pmbus_read_word_data(client, page,
-				     pmbus_fan_command_registers[id]);
 }
 
 static void pmbus_clear_fault_page(struct i2c_client *client, int page)
