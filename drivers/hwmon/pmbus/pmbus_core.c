@@ -129,6 +129,13 @@ struct pmbus_debugfs_entry {
 	u8 reg;
 };
 
+static const int pmbus_fan_have_pwm[] = {
+	PMBUS_HAVE_PWM12,
+	PMBUS_HAVE_PWM12,
+	PMBUS_HAVE_PWM34,
+	PMBUS_HAVE_PWM34,
+};
+
 static const int pmbus_fan_rpm_mask[] = {
 	PB_FAN_1_RPM,
 	PB_FAN_2_RPM,
@@ -219,25 +226,76 @@ int pmbus_write_word_data(struct i2c_client *client, int page, u8 reg,
 }
 EXPORT_SYMBOL_GPL(pmbus_write_word_data);
 
+static int pmbus_find_sensor(struct pmbus_data *data, int page, int reg)
+{
+	struct pmbus_sensor *sensor;
+
+	for (sensor = start ?: data->sensors; sensor; sensor = sensor->next) {
+		if (sensor->page == page && sensor->reg == reg)
+			return sensor;
+	}
+
+	return NULL;
+}
+
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
 	             u8 config, u8 mask, u16 command)
 {
-	int from, rv;
+	struct pmbus_data *data = i2c_get_clientdata(client);
+	struct pmbus_sensor *sensor;
+	enum pmbus_fan_mode mode;
+	int current;
+	int base;
+	int from;
+	int rv;
 	u8 to;
 
+	/* Read and update FAN_CONFIG_xy if required */
 	from = pmbus_read_byte_data(client, page,
 				    pmbus_fan_config_registers[id]);
 	if (from < 0)
 		return from;
 
 	to = (from & ~mask) | (config & mask);
-
 	if (to != from) {
 		rv = pmbus_write_byte_data(client, page,
 					   pmbus_fan_config_registers[id], to);
 		if (rv < 0)
 			return rv;
 	}
+
+	/*
+	 * Update FAN_COMMAND_x based on the current command value, the command
+	 * value cache for the requested mode, and the requested command value.
+	 *
+	 * If the current command value matches the requested command value
+	 * but the mode is being changed, then use the cached command value of
+	 * the requested mode instead of using the requested command value.
+	 * This ensures *some* sanity, rather than just blindly treating an RPM
+	 * value as a PWM value. This case is hit by modifying the pwmX_enable
+	 * attribute.
+	 */
+	current = pmbus_read_word_data(client, page,
+				     pmbus_fan_command_registers[id]);
+	if (current < 0)
+		return current;
+
+	mode = (rpm == !!(config & PB_FAN_12_RPM));
+	base = (mode == percent ? PMBUS_VIRT_PWM_1 : PMBUS_VIRT_FAN_TARGET_1);
+	sensor = pmbus_find_sensor(data, page, base + id);
+	if (current == command && command != sensor->data)
+		/*
+		 * Best effort to avoid melting something. If userspace has
+		 * changed modes by poking pwmX_enable, then if it's in any way
+		 * sane it should write pwmX or fanX_target shortly after. The
+		 * actual fan rate will be reflected in fanX_input regardless
+		 * of what pwmX or fanX_target says.
+		 *
+		 * An atomic mode change with valid target rate can be
+		 * performed by writing just pwmX or fanX_target and not
+		 * touching pwmX_enable.
+		 */
+		command = sensor->data ?: 0xffff;
 
 	return pmbus_write_word_data(client, page,
 				     pmbus_fan_command_registers[id], command);
@@ -1754,7 +1812,7 @@ static int pmbus_add_fan_ctrl(struct i2c_client *client,
 
 	sensor = pmbus_add_sensor(data, "fan", "target", index, page,
 				  PMBUS_VIRT_FAN_TARGET_1 + id, PSC_FAN,
-				  true, false, true);
+				  false, false, true);
 
 	if (!sensor)
 		return -ENOMEM;
@@ -1765,7 +1823,7 @@ static int pmbus_add_fan_ctrl(struct i2c_client *client,
 
 	sensor = pmbus_add_sensor(data, "pwm", NULL, index, page,
 				  PMBUS_VIRT_PWM_1 + id, PSC_PWM,
-				  true, false, true);
+				  false, false, true);
 
 	if (!sensor)
 		return -ENOMEM;
