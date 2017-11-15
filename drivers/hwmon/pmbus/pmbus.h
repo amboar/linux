@@ -195,10 +195,11 @@ enum pmbus_regs {
 	 * RPM and PWM Fan control
 	 *
 	 * Drivers wanting to expose PWM control must define the behaviour of
-	 * PMBUS_VIRT_PWM_ENABLE_[1-4] in the {read,write}_word_data callback.
+	 * PMBUS_VIRT_PWM_[1-4] and PMBUS_VIRT_PWM_ENABLE_[1-4] in the
+	 * {read,write}_word_data callback.
 	 *
-	 * pmbus core provides default implementations for
-	 * PMBUS_VIRT_FAN_TARGET_[1-4] and PMBUS_VIRT_PWM_[1-4].
+	 * pmbus core provides a default implementation for
+	 * PMBUS_VIRT_FAN_TARGET_[1-4].
 	 */
 	PMBUS_VIRT_FAN_TARGET_1,
 	PMBUS_VIRT_FAN_TARGET_2,
