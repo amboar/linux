@@ -250,6 +250,8 @@ enum pmbus_regs {
 #define PB_FAN_1_RPM			BIT(6)
 #define PB_FAN_1_INSTALLED		BIT(7)
 
+#define PB_FAN_12_RPM 			(PB_FAN_1_RPM | PB_FAN_2_RPM)
+
 enum pmbus_fan_mode { percent = 0, rpm };
 
 /*
@@ -445,8 +447,6 @@ int pmbus_write_byte_data(struct i2c_client *client, int page, u8 reg,
 			  u8 value);
 int pmbus_update_byte_data(struct i2c_client *client, int page, u8 reg,
 			   u8 mask, u8 value);
-int pmbus_update_fan(struct i2c_client *client, int page, int id,
-		     u8 config, u8 mask, u16 command);
 void pmbus_clear_faults(struct i2c_client *client);
 bool pmbus_check_byte_register(struct i2c_client *client, int page, int reg);
 bool pmbus_check_word_register(struct i2c_client *client, int page, int reg);
@@ -455,5 +455,8 @@ int pmbus_do_probe(struct i2c_client *client, const struct i2c_device_id *id,
 int pmbus_do_remove(struct i2c_client *client);
 const struct pmbus_driver_info *pmbus_get_driver_info(struct i2c_client
 						      *client);
-
+int pmbus_get_target_fan_rate(struct i2c_client *client, int page, int id,
+			      enum pmbus_fan_mode mode);
+int pmbus_update_fan(struct i2c_client *client, int page, int id,
+		     u8 config, u8 mask, u16 command);
 #endif /* PMBUS_H */
