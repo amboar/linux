@@ -356,28 +356,6 @@ int pmbus_read_word_data(struct i2c_client *client, int page, u8 reg)
 }
 EXPORT_SYMBOL_GPL(pmbus_read_word_data);
 
-static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
-			      enum pmbus_fan_mode mode);
-
-static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg)
-{
-	int status;
-	int id;
-
-	switch (reg) {
-		case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
-			id = reg - PMBUS_VIRT_FAN_TARGET_1;
-			status = pmbus_get_fan_rate(client, page, id, rpm);
-			break;
-		default:
-			status = -ENXIO;
-			break;
-	}
-
-	return status;
-
-}
-
 /*
  * _pmbus_read_word_data() is similar to pmbus_read_word_data(), but checks if
  * a device specific mapping function exists and calls it if necessary.
@@ -393,9 +371,6 @@ static int _pmbus_read_word_data(struct i2c_client *client, int page, int reg)
 		if (status != -ENODATA)
 			return status;
 	}
-
-	if (reg >= PMBUS_VIRT_BASE)
-		return pmbus_read_virt_reg(client, page, reg);
 
 	return pmbus_read_word_data(client, page, reg);
 }
@@ -461,27 +436,26 @@ static int _pmbus_read_byte_data(struct i2c_client *client, int page, int reg)
 	return pmbus_read_byte_data(client, page, reg);
 }
 
-static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
-			      enum pmbus_fan_mode mode)
+int pmbus_get_fan_rate(struct i2c_client *client, int page, int id)
 {
+	struct pmbus_data *data = i2c_get_clientdata(client);
+	struct pmbus_sensor *sensor;
+	enum pmbus_fan_mode mode;
 	int config;
+	int base;
 
 	config = _pmbus_read_byte_data(client, page,
 				       pmbus_fan_config_registers[id]);
 	if (config < 0)
 		return config;
 
-	/*
-	 * We can't meaningfully translate between PWM and RPM, so if the
-	 * attribute mode (fan[1-*]_target is RPM, pwm[1-*] and pwm[1-*]_enable
-	 * are PWM) doesn't match the hardware mode, then report 0 instead.
-	 */
-	if ((mode == rpm) != (!!(config & pmbus_fan_rpm_mask[id])))
-		return 0;
+	mode = (rpm == !!(config & PB_FAN_12_RPM));
+	base = (mode == percent ? PMBUS_VIRT_PWM_1 : PMBUS_VIRT_FAN_TARGET_1);
+	sensor = pmbus_find_sensor(data, page, base + id);
 
-	return _pmbus_read_word_data(client, page,
-				     pmbus_fan_command_registers[id]);
+	return sensor->data;
 }
+EXPORT_SYMBOL_GPL(pmbus_get_fan_rate);
 
 static void pmbus_clear_fault_page(struct i2c_client *client, int page)
 {
