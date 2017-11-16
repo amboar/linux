@@ -143,16 +143,16 @@ static int max31785_get_pwm_mode(struct i2c_client *client, int page)
 	if (command < 0)
 		return command;
 
-	if (!(config & PB_FAN_1_RPM)) {
-		if (command >= 0x8000)
-			return 2;
-		else if (command >= 0x2711)
-			return 0;
+	if (config & PB_FAN_1_RPM)
+		return (command >= 0x8000) ? 2 : 1;
 
-		return 1;
-	}
+	if (command >= 0x8000)
+		return 3;
+	else if (command >= 0x2711)
+		return 0;
 
-	return (command >= 0x8000) ? 2 : 1;
+	return 1;
+
 }
 
 static int max31785_read_word_data(struct i2c_client *client, int page,
@@ -176,21 +176,7 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 		rv = (val >> 16) & 0xffff;
 		break;
 	}
-	case PMBUS_VIRT_PWM_1:
-		if (page >= MAX31785_NR_PAGES)
-			return -ENOTSUPP;
-
-		rv = max31785_get_pwm(client, page);
-		if (rv < 0)
-			return rv;
-
-		rv *= 255;
-		rv /= 100;
-		break;
 	case PMBUS_VIRT_PWM_ENABLE_1:
-		if (page >= MAX31785_NR_PAGES)
-			return -ENOTSUPP;
-
 		rv = max31785_get_pwm_mode(client, page);
 		break;
 	default:
@@ -201,18 +187,34 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 	return rv;
 }
 
-static const int max31785_pwm_modes[] = { 0x7fff, 0x2710, 0xffff };
+static const int max31785_pwm_modes[] = { 0x7fff, 0x2710, 0, 0xffff };
 
 static int max31785_write_word_data(struct i2c_client *client, int page,
 				    int reg, u16 word)
 {
+	u32 command;
+
 	if (page >= MAX31785_NR_PAGES)
 		return -ENXIO;
 
 	switch (reg) {
+	case PMBUS_VIRT_PWM_1:
+		command = word;
+		command *= 100;
+		command /= 255;
+
+		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
+					command);
 	case PMBUS_VIRT_PWM_ENABLE_1:
 		if (word >= ARRAY_SIZE(max31785_pwm_modes))
 			return -EINVAL;
+
+		if (word == 2) {
+			int rate = pmbus_get_fan_rate(client, page, 0);
+
+			return pmbus_update_fan(client, page, 0, PB_FAN_1_RPM,
+						PB_FAN_1_RPM, rate);
+		}
 
 		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
 					max31785_pwm_modes[word]);
