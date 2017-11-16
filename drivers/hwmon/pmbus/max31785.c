@@ -570,7 +570,7 @@ static int max31785_configure_dual_tach(struct i2c_client *client,
 		if (ret & MFR_FAN_CONFIG_DUAL_TACH) {
 			int virtual = MAX31785_NR_PAGES + i;
 
-			info->pages = max(info->pages, virtual + 1);
+			info->pages = virtual + 1;
 			info->func[virtual] |= PMBUS_HAVE_FAN12;
 			info->func[virtual] |= PMBUS_PAGE_VIRTUAL;
 		}
