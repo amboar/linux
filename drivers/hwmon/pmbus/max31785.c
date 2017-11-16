@@ -187,8 +187,6 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 	return rv;
 }
 
-static const int max31785_pwm_modes[] = { 0x7fff, 0x2710, 0, 0xffff };
-
 static int max31785_write_word_data(struct i2c_client *client, int page,
 				    int reg, u16 word)
 {
@@ -200,24 +198,32 @@ static int max31785_write_word_data(struct i2c_client *client, int page,
 	switch (reg) {
 	case PMBUS_VIRT_PWM_1:
 		command = word;
-		command *= 100;
+		command *= 0x2710;
 		command /= 255;
 
 		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
 					command);
 	case PMBUS_VIRT_PWM_ENABLE_1:
-		if (word >= ARRAY_SIZE(max31785_pwm_modes))
-			return -EINVAL;
+		switch (word) {
+		case 0:
+			return pmbus_update_fan(client, page, 0, 0,
+						PB_FAN_1_RPM, 0x7fff);
+		case 1:
+			command = pmbus_get_fan_rate(client, page, 0);
 
-		if (word == 2) {
-			int rate = pmbus_get_fan_rate(client, page, 0);
+			return pmbus_update_fan(client, page, 0, 0,
+						PB_FAN_1_RPM, command);
+		case 2:
+			command = pmbus_get_fan_rate(client, page, 0);
 
 			return pmbus_update_fan(client, page, 0, PB_FAN_1_RPM,
-						PB_FAN_1_RPM, rate);
+						PB_FAN_1_RPM, command);
+		case 3:
+			return pmbus_update_fan(client, page, 0, 0,
+						PB_FAN_1_RPM, 0xffff);
+		default:
+			return -EINVAL;
 		}
-
-		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
-					max31785_pwm_modes[word]);
 	default:
 		break;
 	}
