@@ -164,7 +164,7 @@ int pmbus_set_page(struct i2c_client *client, int page)
 	int rv = 0;
 	int newpage;
 
-	if (page >= 0 && page == data->currpage)
+	if (page < 0 || page == data->currpage)
 		return 0;
 
 	if (!(data->info->func[page] & PMBUS_PAGE_VIRTUAL)) {
