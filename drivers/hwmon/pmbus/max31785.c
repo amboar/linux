@@ -144,7 +144,7 @@ static int max31785_get_pwm_mode(struct i2c_client *client, int page)
 		return command;
 
 	if (config & PB_FAN_1_RPM)
-		return (command >= 0x8000) ? 2 : 1;
+		return (command >= 0x8000) ? 3 : 2;
 
 	if (command >= 0x8000)
 		return 3;
