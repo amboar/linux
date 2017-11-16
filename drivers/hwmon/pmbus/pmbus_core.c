@@ -223,6 +223,51 @@ int pmbus_write_word_data(struct i2c_client *client, int page, u8 reg,
 }
 EXPORT_SYMBOL_GPL(pmbus_write_word_data);
 
+
+static int pmbus_write_virt_reg(struct i2c_client *client, int page, int reg,
+				u16 word)
+{
+	int status;
+	int bit;
+	int id;
+
+	switch (reg) {
+	case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
+		id = reg - PMBUS_VIRT_FAN_TARGET_1;
+		bit = pmbus_fan_rpm_mask[id];
+		status = pmbus_update_fan(client, page, id, bit, bit, word);
+		break;
+	default:
+		status = -ENXIO;
+		break;
+	}
+
+	return status;
+}
+
+/*
+ * _pmbus_write_word_data() is similar to pmbus_write_word_data(), but checks if
+ * a device specific mapping function exists and calls it if necessary.
+ */
+static int _pmbus_write_word_data(struct i2c_client *client, int page, int reg,
+				  u16 word)
+{
+	struct pmbus_data *data = i2c_get_clientdata(client);
+	const struct pmbus_driver_info *info = data->info;
+	int status;
+
+	if (info->write_word_data) {
+		status = info->write_word_data(client, page, reg, word);
+		if (status != -ENODATA)
+			return status;
+	}
+
+	if (reg >= PMBUS_VIRT_BASE)
+		return pmbus_write_virt_reg(client, page, reg, word);
+
+	return pmbus_write_word_data(client, page, reg, word);
+}
+
 static struct pmbus_sensor *pmbus_find_sensor(struct pmbus_data *data, int page,
 					      int reg)
 {
@@ -309,53 +354,9 @@ int pmbus_update_fan(struct i2c_client *client, int page, int id,
 		reg = pmbus_fan_command_registers[id];
 	}
 
-	return pmbus_write_word_data(client, page, reg, command);
+	return _pmbus_write_word_data(client, page, reg, command);
 }
 EXPORT_SYMBOL_GPL(pmbus_update_fan);
-
-static int pmbus_write_virt_reg(struct i2c_client *client, int page, int reg,
-				u16 word)
-{
-	int status;
-	int bit;
-	int id;
-
-	switch (reg) {
-	case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
-		id = reg - PMBUS_VIRT_FAN_TARGET_1;
-		bit = pmbus_fan_rpm_mask[id];
-		status = pmbus_update_fan(client, page, id, bit, bit, word);
-		break;
-	default:
-		status = -ENXIO;
-		break;
-	}
-
-	return status;
-}
-
-/*
- * _pmbus_write_word_data() is similar to pmbus_write_word_data(), but checks if
- * a device specific mapping function exists and calls it if necessary.
- */
-static int _pmbus_write_word_data(struct i2c_client *client, int page, int reg,
-				  u16 word)
-{
-	struct pmbus_data *data = i2c_get_clientdata(client);
-	const struct pmbus_driver_info *info = data->info;
-	int status;
-
-	if (info->write_word_data) {
-		status = info->write_word_data(client, page, reg, word);
-		if (status != -ENODATA)
-			return status;
-	}
-
-	if (reg >= PMBUS_VIRT_BASE)
-		return pmbus_write_virt_reg(client, page, reg, word);
-
-	return pmbus_write_word_data(client, page, reg, word);
-}
 
 int pmbus_read_word_data(struct i2c_client *client, int page, u8 reg)
 {
@@ -384,6 +385,8 @@ static int _pmbus_read_word_data(struct i2c_client *client, int page, int reg)
 		if (status != -ENODATA)
 			return status;
 	}
+
+	/* FIXME: Add back read of virtual registers */
 
 	return pmbus_read_word_data(client, page, reg);
 }

@@ -151,6 +151,7 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 		rv = (val >> 16) & 0xffff;
 		break;
 	}
+	/* FIXME: Add back read of PWM attribute and get_pwm() impl */
 	case PMBUS_VIRT_PWM_ENABLE_1:
 		rv = max31785_get_pwm_mode(client, page);
 		break;
@@ -173,7 +174,7 @@ static int max31785_write_word_data(struct i2c_client *client, int page,
 	switch (reg) {
 	case PMBUS_VIRT_PWM_1:
 		command = word;
-		command *= 0x2710;
+		command *= 100;
 		command /= 255;
 
 		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
