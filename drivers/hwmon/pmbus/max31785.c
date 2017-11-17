@@ -106,7 +106,7 @@ static int max31785_get_pwm(struct i2c_client *client, int page)
 {
 	int rv;
 
-	rv = pmbus_get_fan_rate_cooked(client, page, 0, percent);
+	rv = pmbus_get_fan_rate_device(client, page, 0, percent);
 	if (rv < 0)
 		return rv;
 	else if (rv >= 0x8000)
