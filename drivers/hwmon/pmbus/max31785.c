@@ -127,19 +127,16 @@ static int max31785_get_pwm_mode(struct i2c_client *client, int page)
 		return 0;
 
 	return 1;
-
 }
 
 static int max31785_read_word_data(struct i2c_client *client, int page,
 				   int reg)
 {
+	u32 val;
 	int rv;
 
 	switch (reg) {
 	case PMBUS_READ_FAN_SPEED_1:
-	{
-		u32 val;
-
 		if (page < MAX31785_NR_PAGES)
 			return -ENODATA;
 
@@ -150,7 +147,6 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 
 		rv = (val >> 16) & 0xffff;
 		break;
-	}
 	/* FIXME: Add back read of PWM attribute and get_pwm() impl */
 	case PMBUS_VIRT_PWM_ENABLE_1:
 		rv = max31785_get_pwm_mode(client, page);
@@ -163,43 +159,55 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 	return rv;
 }
 
+static int max31785_pwm_enable(struct i2c_client *client, int page,
+				    u16 word)
+{
+	int config = 0;
+	int rate;
+	int rv;
+
+	switch (word) {
+	case 0:
+		rate = 0x7fff;
+		break;
+	case 1:
+		rate = pmbus_get_fan_rate_cached(client, page, 0, percent);
+		if (rv < 0)
+			return rv;
+		break;
+	case 2:
+		config = PB_FAN_1_RPM;
+		rate = pmbus_get_fan_rate_cached(client, page, 0, rpm);
+		if (rate < 0)
+			return rate;
+		break;
+	case 3:
+		rate = 0xffff;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return pmbus_update_fan(client, page, 0, config, PB_FAN_1_RPM, rate);
+}
+
 static int max31785_write_word_data(struct i2c_client *client, int page,
 				    int reg, u16 word)
 {
-	u32 command;
+	u32 val;
 
 	if (page >= MAX31785_NR_PAGES)
 		return -ENXIO;
 
 	switch (reg) {
 	case PMBUS_VIRT_PWM_1:
-		command = word;
-		command *= 100;
-		command /= 255;
+		val = word;
+		val *= 100;
+		val /= 255;
 
-		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
-					command);
+		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM, val);
 	case PMBUS_VIRT_PWM_ENABLE_1:
-		switch (word) {
-		case 0:
-			return pmbus_update_fan(client, page, 0, 0,
-						PB_FAN_1_RPM, 0x7fff);
-		case 1:
-			command = pmbus_get_fan_rate(client, page, 0);
-
-			return pmbus_update_fan(client, page, 0, 0,
-						PB_FAN_1_RPM, command);
-		case 2:
-			command = pmbus_get_fan_rate(client, page, 0);
-
-			return pmbus_update_fan(client, page, 0, PB_FAN_1_RPM,
-						PB_FAN_1_RPM, command);
-		case 3:
-			return pmbus_update_fan(client, page, 0, 0,
-						PB_FAN_1_RPM, 0xffff);
-		default:
-			return -EINVAL;
-		}
+		return max31785_pwm_enable(client, page, word);
 	default:
 		break;
 	}
