@@ -372,21 +372,20 @@ EXPORT_SYMBOL_GPL(pmbus_read_word_data);
 
 static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg)
 {
-	int status;
+	int rv;
 	int id;
 
 	switch (reg) {
-		case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
-			id = reg - PMBUS_VIRT_FAN_TARGET_1;
-			status = pmbus_get_fan_rate(client, page, id, rpm);
-			break;
-		default:
-			status = -ENXIO;
-			break;
+	case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
+		id = reg - PMBUS_VIRT_FAN_TARGET_1;
+		rv = pmbus_get_fan_rate_cooked(client, page, id, rpm);
+		break;
+	default:
+		rv = -ENXIO;
+		break;
 	}
 
-	return status;
-
+	return rv;
 }
 
 /*
@@ -472,12 +471,54 @@ static int _pmbus_read_byte_data(struct i2c_client *client, int page, int reg)
 	return pmbus_read_byte_data(client, page, reg);
 }
 
-int pmbus_get_fan_rate(struct i2c_client *client, int page, int id)
+static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
+				   enum pmbus_fan_mode mode, bool from_cache)
+{
+	struct pmbus_data *data = i2c_get_clientdata(client);
+	bool want_rpm, have_rpm;
+	struct pmbus_sensor *s;
+	int config;
+	int reg;
+
+	config = pmbus_read_byte_data(client, page,
+			pmbus_fan_config_registers[id]);
+	if (config < 0)
+		return config;
+
+	want_rpm = (mode == rpm);
+	have_rpm = !!(config & pmbus_fan_rpm_mask[id]);
+
+	if (want_rpm == have_rpm)
+		return pmbus_read_word_data(client, page,
+				pmbus_fan_command_registers[id]);
+
+	if (!from_cache)
+		return 0;
+
+	reg = want_rpm ? PMBUS_VIRT_FAN_TARGET_1 : PMBUS_VIRT_PWM_1;
+	s = pmbus_find_sensor(data, page, reg + id);
+
+	return s->data;
+}
+
+int pmbus_get_fan_rate_cooked(struct i2c_client *client, int page, int id,
+			      enum pmbus_fan_mode mode)
+{
+	return pmbus_get_fan_rate(client, page, id, mode, false);
+}
+
+int pmbus_get_fan_rate_cached(struct i2c_client *client, int page, int id,
+			      enum pmbus_fan_mode mode)
+{
+	return pmbus_get_fan_rate(client, page, id, mode, true);
+}
+
+int pmbus_read_fan_rate(struct i2c_client *client, int page, int id)
 {
 	return pmbus_read_word_data(client, page,
 				    pmbus_fan_command_registers[id]);
 }
-EXPORT_SYMBOL_GPL(pmbus_get_fan_rate);
+EXPORT_SYMBOL_GPL(pmbus_read_fan_rate);
 
 static void pmbus_clear_fault_page(struct i2c_client *client, int page)
 {
