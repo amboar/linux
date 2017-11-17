@@ -284,15 +284,10 @@ static struct pmbus_sensor *pmbus_find_sensor(struct pmbus_data *data, int page,
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
 	             u8 config, u8 mask, u16 command)
 {
-	enum pmbus_fan_mode mode;
-	bool switched;
-	int curr;
 	int from;
-	int reg;
 	int rv;
 	u8 to;
 
-	/* Read and update FAN_CONFIG_xy if required */
 	from = pmbus_read_byte_data(client, page,
 				    pmbus_fan_config_registers[id]);
 	if (from < 0)
@@ -306,55 +301,8 @@ int pmbus_update_fan(struct i2c_client *client, int page, int id,
 			return rv;
 	}
 
-	/*
-	 * Update FAN_COMMAND_x based on the current command value, the command
-	 * value cache for the requested mode, and the requested command value.
-	 *
-	 * If the current command value matches the requested command value
-	 * but the mode is being changed, then use the cached value in the
-	 * requested mode's sensor instead of using the requested command
-	 * value. This ensures *some* sanity, rather than just blindly treating
-	 * an RPM value as a PWM value. This case is hit by modifying the
-	 * pwmX_enable attribute.
-	 */
-	curr = pmbus_read_word_data(client, page,
-				    pmbus_fan_command_registers[id]);
-	if (curr < 0)
-		return curr;
-
-	mode = (rpm == !!(config & PB_FAN_12_RPM));
-	reg = (mode == rpm ? PMBUS_VIRT_FAN_TARGET_1 : PMBUS_VIRT_PWM_1) + id;
-	switched = (from & PB_FAN_12_RPM) != (to & PB_FAN_12_RPM);
-	if (curr == command && switched) {
-		/*
-		 * If userspace has changed modes by poking pwmX_enable, then
-		 * if it's in any way sane it should write pwmX or fanX_target
-		 * shortly after. The actual fan rate will be reflected in
-		 * fanX_input regardless of what pwmX or fanX_target says.
-		 *
-		 * An atomic mode change with valid target rate can be
-		 * performed by writing just pwmX or fanX_target and not
-		 * touching pwmX_enable.
-		 *
-		 * The sensor value stored in command still needs to be scaled
-		 * in the PWM case, but the ranges are device dependent. The
-		 * scaling is achieved by writing through the virtual register
-		 * associated with the sensor. This action will likely lead to
-		 * a mutually recursive call to pmbus_update_fan(), but the
-		 * stop condition will be satisfied on the second call as at
-		 * least 'switched' will be false forcing execution to the else
-		 * branch below, writing the now-scaled value to the real
-		 * command register.
-		 */
-		struct pmbus_sensor *s;
-
-		s = pmbus_find_sensor(i2c_get_clientdata(client), page, reg);
-		command = s->data;
-	} else {
-		reg = pmbus_fan_command_registers[id];
-	}
-
-	return _pmbus_write_word_data(client, page, reg, command);
+	return _pmbus_write_word_data(client, page,
+				      pmbus_fan_command_registers[id], command);
 }
 EXPORT_SYMBOL_GPL(pmbus_update_fan);
 
