@@ -459,10 +459,8 @@ int pmbus_do_probe(struct i2c_client *client, const struct i2c_device_id *id,
 int pmbus_do_remove(struct i2c_client *client);
 const struct pmbus_driver_info *pmbus_get_driver_info(struct i2c_client
 						      *client);
-int pmbus_read_fan_rate(struct i2c_client *client, int page, int id);
-int pmbus_get_fan_rate_cooked(struct i2c_client *client, int page, int id,
+int pmbus_get_fan_rate_device(struct i2c_client *client, int page, int id,
 			      enum pmbus_fan_mode mode);
 int pmbus_get_fan_rate_cached(struct i2c_client *client, int page, int id,
 			      enum pmbus_fan_mode mode);
-
 #endif /* PMBUS_H */
