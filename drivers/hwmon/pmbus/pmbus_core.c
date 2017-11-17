@@ -370,6 +370,25 @@ int pmbus_read_word_data(struct i2c_client *client, int page, u8 reg)
 }
 EXPORT_SYMBOL_GPL(pmbus_read_word_data);
 
+static int pmbus_read_virt_reg(struct i2c_client *client, int page, int reg)
+{
+	int status;
+	int id;
+
+	switch (reg) {
+		case PMBUS_VIRT_FAN_TARGET_1 ... PMBUS_VIRT_FAN_TARGET_4:
+			id = reg - PMBUS_VIRT_FAN_TARGET_1;
+			status = pmbus_get_fan_rate(client, page, id, rpm);
+			break;
+		default:
+			status = -ENXIO;
+			break;
+	}
+
+	return status;
+
+}
+
 /*
  * _pmbus_read_word_data() is similar to pmbus_read_word_data(), but checks if
  * a device specific mapping function exists and calls it if necessary.
@@ -386,7 +405,8 @@ static int _pmbus_read_word_data(struct i2c_client *client, int page, int reg)
 			return status;
 	}
 
-	/* FIXME: Add back read of virtual registers */
+	if (reg >= PMBUS_VIRT_BASE)
+		return pmbus_read_virt_reg(client, page, reg);
 
 	return pmbus_read_word_data(client, page, reg);
 }
