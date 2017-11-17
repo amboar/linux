@@ -438,7 +438,7 @@ static int pmbus_get_fan_rate(struct i2c_client *client, int page, int id,
 
 	if (want_rpm == have_rpm)
 		return pmbus_read_word_data(client, page,
-				pmbus_fan_command_registers[id]);
+					    pmbus_fan_command_registers[id]);
 
 	if (!from_cache)
 		return 0;
