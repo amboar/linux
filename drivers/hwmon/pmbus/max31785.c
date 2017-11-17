@@ -176,6 +176,11 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 	return rv;
 }
 
+static inline u32 max31785_scale_pwm(u32 sensor_val)
+{
+	return (sensor_val * 100) / 255;
+}
+
 static int max31785_pwm_enable(struct i2c_client *client, int page,
 				    u16 word)
 {
@@ -188,6 +193,7 @@ static int max31785_pwm_enable(struct i2c_client *client, int page,
 		break;
 	case 1:
 		rate = pmbus_get_fan_rate_cached(client, page, 0, percent);
+		rate = max31785_scale_pwm(rate);
 		if (rate < 0)
 			return rate;
 		break;
@@ -210,18 +216,13 @@ static int max31785_pwm_enable(struct i2c_client *client, int page,
 static int max31785_write_word_data(struct i2c_client *client, int page,
 				    int reg, u16 word)
 {
-	u32 val;
-
 	if (page >= MAX31785_NR_PAGES)
 		return -ENXIO;
 
 	switch (reg) {
 	case PMBUS_VIRT_PWM_1:
-		val = word;
-		val *= 100;
-		val /= 255;
-
-		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM, val);
+		return pmbus_update_fan(client, page, 0, 0, PB_FAN_1_RPM,
+					max31785_scale_pwm(word));
 	case PMBUS_VIRT_PWM_ENABLE_1:
 		return max31785_pwm_enable(client, page, word);
 	default:
