@@ -107,27 +107,17 @@ static int max31785_read_long_data(struct i2c_client *client, int page,
 
 static int max31785_get_pwm(struct i2c_client *client, int page)
 {
-	int config;
-	int command;
+	int rv;
 
-	config = pmbus_read_byte_data(client, page, PMBUS_FAN_CONFIG_12);
-	if (config < 0)
-		return config;
+	rv = pmbus_get_fan_rate_cooked(client, page, 0, percent);
+	if (rv < 0)
+		return rv;
+	else if (rv >= 0x8000)
+		return 0;
+	else if (rv >= 0x2711)
+		return 0x2710;
 
-	command = pmbus_read_word_data(client, page, PMBUS_FAN_COMMAND_1);
-	if (command < 0)
-		return command;
-
-	if (!(config & PB_FAN_1_RPM)) {
-		if (command >= 0x8000)
-			return 0;
-		else if (command >= 0x2711)
-			return 0x2710;
-
-		return command;
-	}
-
-	return 0;
+	return rv;
 }
 
 static int max31785_get_pwm_mode(struct i2c_client *client, int page)
@@ -172,7 +162,9 @@ static int max31785_read_word_data(struct i2c_client *client, int page,
 
 		rv = (val >> 16) & 0xffff;
 		break;
-	/* FIXME: Add back read of PWM attribute and get_pwm() impl */
+	case PMBUS_VIRT_PWM_1:
+		rv = max31785_get_pwm(client, page);
+		break;
 	case PMBUS_VIRT_PWM_ENABLE_1:
 		rv = max31785_get_pwm_mode(client, page);
 		break;
@@ -189,7 +181,6 @@ static int max31785_pwm_enable(struct i2c_client *client, int page,
 {
 	int config = 0;
 	int rate;
-	int rv;
 
 	switch (word) {
 	case 0:
@@ -197,8 +188,8 @@ static int max31785_pwm_enable(struct i2c_client *client, int page,
 		break;
 	case 1:
 		rate = pmbus_get_fan_rate_cached(client, page, 0, percent);
-		if (rv < 0)
-			return rv;
+		if (rate < 0)
+			return rate;
 		break;
 	case 2:
 		config = PB_FAN_1_RPM;
