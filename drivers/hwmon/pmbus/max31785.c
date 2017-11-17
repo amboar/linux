@@ -42,16 +42,13 @@ enum max31785_regs {
 static int max31785_read_byte_data(struct i2c_client *client, int page,
 				   int reg)
 {
+	if (page < MAX31785_NR_PAGES)
+		return -ENODATA;
+
 	switch (reg) {
 	case PMBUS_VOUT_MODE:
-		if (page < MAX31785_NR_PAGES)
-			return -ENODATA;
-
 		return -ENOTSUPP;
 	case PMBUS_FAN_CONFIG_12:
-		if (page < MAX31785_NR_PAGES)
-			return -ENODATA;
-
 		return pmbus_read_byte_data(client, page - MAX31785_NR_PAGES,
 					    reg);
 	}
