@@ -143,6 +143,10 @@
 		rear-power {
 			gpios = <&gpio ASPEED_GPIO(N, 3) GPIO_ACTIVE_LOW>;
 		};
+
+		power-button {
+			gpios = <&gpio ASPEED_GPIO(R, 5) GPIO_ACTIVE_LOW>;
+		};
 	};
 
 	fsi: gpio-fsi {
