@@ -468,7 +468,7 @@ static ssize_t occ_show_power_1(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
 	int rc;
-	u32 val = 0;
+	u64 val = 0;
 	struct power_sensor_1 *power;
 	struct occ *occ = dev_get_drvdata(dev);
 	struct occ_sensors *sensors = &occ->sensors;
@@ -491,11 +491,11 @@ static ssize_t occ_show_power_1(struct device *dev,
 		val = get_unaligned_be32(&power->accumulator);
 		break;
 	case 3:
-		val = get_unaligned_be16(&power->value) * 1000000;
+		val = (u64)get_unaligned_be16(&power->value) * 1000000ULL;
 		break;
 	}
 
-	return snprintf(buf, PAGE_SIZE - 1, "%u\n", val);
+	return snprintf(buf, PAGE_SIZE - 1, "%llu\n", val);
 }
 
 static ssize_t occ_show_power_2(struct device *dev,
@@ -525,7 +525,7 @@ static ssize_t occ_show_power_2(struct device *dev,
 		val = get_unaligned_be64(&power->accumulator);
 		break;
 	case 3:
-		val = get_unaligned_be16(&power->value) * 1000000;
+		val = (u64)get_unaligned_be16(&power->value) * 1000000ULL;
 		break;
 	case 4:
 		val = power->function_id;
@@ -562,7 +562,8 @@ static ssize_t occ_show_power_a0(struct device *dev,
 		val = get_unaligned_be16(&power->system.update_time);
 		break;
 	case 2:
-		val = get_unaligned_be16(&power->system.value) * 1000000;
+		val = (u64)get_unaligned_be16(&power->system.value) *
+			1000000ULL;
 		break;
 	case 3:
 		val = get_unaligned_be32(&power->system.update_tag);
@@ -574,7 +575,7 @@ static ssize_t occ_show_power_a0(struct device *dev,
 		val = get_unaligned_be16(&power->proc.update_time);
 		break;
 	case 6:
-		val = get_unaligned_be16(&power->proc.value) * 1000000;
+		val = (u64)get_unaligned_be16(&power->proc.value) * 1000000ULL;
 		break;
 	case 7:
 		val = get_unaligned_be32(&power->proc.update_tag);
@@ -583,7 +584,7 @@ static ssize_t occ_show_power_a0(struct device *dev,
 		val = get_unaligned_be64(&power->proc.accumulator);
 		break;
 	case 9:
-		val = get_unaligned_be16(&power->vdd.value) * 1000000;
+		val = (u64)get_unaligned_be16(&power->vdd.value) * 1000000ULL;
 		break;
 	case 10:
 		val = get_unaligned_be32(&power->vdd.update_tag);
@@ -592,7 +593,7 @@ static ssize_t occ_show_power_a0(struct device *dev,
 		val = get_unaligned_be64(&power->vdd.accumulator);
 		break;
 	case 12:
-		val = get_unaligned_be16(&power->vdn.value) * 1000000;
+		val = (u64)get_unaligned_be16(&power->vdn.value) * 1000000ULL;
 		break;
 	case 13:
 		val = get_unaligned_be32(&power->vdn.update_tag);
