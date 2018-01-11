@@ -9,6 +9,7 @@
 
 #include <linux/device.h>
 #include <linux/i2c.h>
+#include <linux/i2c/pmbus.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
 
@@ -116,9 +117,14 @@ static struct pmbus_driver_info ibm_cffps_info = {
 	.read_word_data = ibm_cffps_read_word_data,
 };
 
+static struct pmbus_platform_data ibm_cffps_pdata = {
+	.flags = PMBUS_SKIP_STATUS_CHECK,
+};
+
 static int ibm_cffps_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
+	client->dev.platform_data = &ibm_cffps_pdata;
 	return pmbus_do_probe(client, id, &ibm_cffps_info);
 }
 
