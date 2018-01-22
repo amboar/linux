@@ -54,7 +54,8 @@
 struct fsi_master_gpio {
 	struct fsi_master	master;
 	struct device		*dev;
-	spinlock_t		cmd_lock;	/* Lock for commands */
+	struct mutex		cmd_lock;	/* mutex for command ordering */
+	spinlock_t		bit_lock;	/* lock for clocking bits out */
 	struct gpio_desc	*gpio_clk;
 	struct gpio_desc	*gpio_data;
 	struct gpio_desc	*gpio_trans;	/* Voltage translator */
@@ -269,9 +270,12 @@ static int read_one_response(struct fsi_master_gpio *master,
 		uint8_t data_size, struct fsi_gpio_msg *msgp, uint8_t *tagp)
 {
 	struct fsi_gpio_msg msg;
-	uint8_t tag;
+	unsigned long flags;
 	uint32_t crc;
+	uint8_t tag;
 	int i;
+
+	spin_lock_irqsave(&master->bit_lock, flags);
 
 	/* wait for the start bit */
 	for (i = 0; i < FSI_GPIO_MTOE_COUNT; i++) {
@@ -285,6 +289,7 @@ static int read_one_response(struct fsi_master_gpio *master,
 		dev_dbg(master->dev,
 			"Master time out waiting for response\n");
 		fsi_master_gpio_error(master, FSI_GPIO_MTOE);
+		spin_unlock_irqrestore(&master->bit_lock, flags);
 		return -EIO;
 	}
 
@@ -302,6 +307,8 @@ static int read_one_response(struct fsi_master_gpio *master,
 
 	/* read CRC */
 	serial_in(master, &msg, FSI_GPIO_CRC_SIZE);
+
+	spin_unlock_irqrestore(&master->bit_lock, flags);
 
 	/* we have a whole message now; check CRC */
 	crc = crc4(0, 1, 1);
@@ -323,12 +330,16 @@ static int read_one_response(struct fsi_master_gpio *master,
 static int issue_term(struct fsi_master_gpio *master, uint8_t slave)
 {
 	struct fsi_gpio_msg cmd;
+	unsigned long flags;
 	uint8_t tag;
 	int rc;
 
 	build_term_command(&cmd, slave);
+
+	spin_lock_irqsave(&master->bit_lock, flags);
 	serial_out(master, &cmd);
 	echo_delay(master);
+	spin_unlock_irqrestore(&master->bit_lock, flags);
 
 	rc = read_one_response(master, 0, NULL, &tag);
 	if (rc < 0) {
@@ -348,6 +359,7 @@ static int poll_for_response(struct fsi_master_gpio *master,
 {
 	struct fsi_gpio_msg response, cmd;
 	int busy_count = 0, rc, i;
+	unsigned long flags;
 	uint8_t tag;
 	uint8_t *data_byte = data;
 
@@ -379,8 +391,10 @@ retry:
 		clock_zeros(master, FSI_GPIO_DPOLL_CLOCKS);
 		if (busy_count++ < FSI_GPIO_MAX_BUSY) {
 			build_dpoll_command(&cmd, slave);
+			spin_lock_irqsave(&master->bit_lock, flags);
 			serial_out(master, &cmd);
 			echo_delay(master);
+			spin_unlock_irqrestore(&master->bit_lock, flags);
 			goto retry;
 		}
 		dev_warn(master->dev,
@@ -404,17 +418,29 @@ retry:
 	return rc;
 }
 
+static void send_request(struct fsi_master_gpio *master,
+		struct fsi_gpio_msg *cmd)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&master->bit_lock, flags);
+	serial_out(master, cmd);
+	echo_delay(master);
+	spin_unlock_irqrestore(&master->bit_lock, flags);
+}
+
 static int fsi_master_gpio_xfer(struct fsi_master_gpio *master, uint8_t slave,
 		struct fsi_gpio_msg *cmd, size_t resp_len, void *resp)
 {
-	unsigned long flags;
 	int rc;
 
-	spin_lock_irqsave(&master->cmd_lock, flags);
-	serial_out(master, cmd);
-	echo_delay(master);
+	mutex_lock(&master->cmd_lock);
+
+	send_request(master, cmd);
+
 	rc = poll_for_response(master, slave, resp_len, resp);
-	spin_unlock_irqrestore(&master->cmd_lock, flags);
+
+	mutex_unlock(&master->cmd_lock);
 
 	return rc;
 }
@@ -461,11 +487,15 @@ static int fsi_master_gpio_term(struct fsi_master *_master,
 static int fsi_master_gpio_break(struct fsi_master *_master, int link)
 {
 	struct fsi_master_gpio *master = to_fsi_master_gpio(_master);
+	unsigned long flags;
 
 	if (link != 0)
 		return -ENODEV;
 
 	trace_fsi_master_gpio_break(master);
+
+	mutex_lock(&master->cmd_lock);
+	spin_lock_irqsave(&master->bit_lock, flags);
 
 	set_sda_output(master, 1);
 	sda_out(master, 1);
@@ -475,6 +505,9 @@ static int fsi_master_gpio_break(struct fsi_master *_master, int link)
 	echo_delay(master);
 	sda_out(master, 1);
 	clock_toggle(master, FSI_POST_BREAK_CLOCKS);
+
+	spin_unlock_irqrestore(&master->bit_lock, flags);
+	mutex_unlock(&master->cmd_lock);
 
 	/* Wait for logic reset to take effect */
 	udelay(200);
@@ -561,7 +594,8 @@ static int fsi_master_gpio_probe(struct platform_device *pdev)
 	master->master.send_break = fsi_master_gpio_break;
 	master->master.link_enable = fsi_master_gpio_link_enable;
 	platform_set_drvdata(pdev, master);
-	spin_lock_init(&master->cmd_lock);
+	spin_lock_init(&master->bit_lock);
+	mutex_init(&master->cmd_lock);
 
 	fsi_master_gpio_init(master);
 
