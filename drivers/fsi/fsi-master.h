@@ -61,4 +61,6 @@ extern void fsi_master_unregister(struct fsi_master *master);
  */
 uint8_t fsi_crc4(uint8_t c, uint64_t x, int bits);
 
+extern int fsi_master_rescan(struct fsi_master *master);
+
 #endif /* DRIVERS_FSI_MASTER_H */
