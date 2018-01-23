@@ -603,7 +603,7 @@ static ssize_t external_mode_store(struct device *dev,
 
 	mutex_unlock(&master->cmd_lock);
 
-	fsi_master_rescan(master);
+	fsi_master_rescan(&master->master);
 
 	return count;
 }
