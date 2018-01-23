@@ -529,6 +529,7 @@ static void fsi_master_gpio_init(struct fsi_master_gpio *master)
 static int fsi_master_gpio_link_enable(struct fsi_master *_master, int link)
 {
 	struct fsi_master_gpio *master = to_fsi_master_gpio(_master);
+	unsigned long flags;
 
 	if (link != 0)
 		return -ENODEV;
