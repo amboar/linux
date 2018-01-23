@@ -467,14 +467,12 @@ static int fsi_master_gpio_term(struct fsi_master *_master,
 static int fsi_master_gpio_break(struct fsi_master *_master, int link)
 {
 	struct fsi_master_gpio *master = to_fsi_master_gpio(_master);
-	unsigned long flags;
 
 	if (link != 0)
 		return -ENODEV;
 
 	trace_fsi_master_gpio_break(master);
 
-	spin_lock_irqsave(&fsi_gpio_cmd_lock, flags);
 	set_sda_output(master, 1);
 	sda_out(master, 1);
 	clock_toggle(master, FSI_PRE_BREAK_CLOCKS);
@@ -483,7 +481,6 @@ static int fsi_master_gpio_break(struct fsi_master *_master, int link)
 	echo_delay(master);
 	sda_out(master, 1);
 	clock_toggle(master, FSI_POST_BREAK_CLOCKS);
-	spin_unlock_irqrestore(&fsi_gpio_cmd_lock, flags);
 
 	/* Wait for logic reset to take effect */
 	udelay(200);
@@ -509,15 +506,11 @@ static void fsi_master_gpio_init(struct fsi_master_gpio *master)
 static int fsi_master_gpio_link_enable(struct fsi_master *_master, int link)
 {
 	struct fsi_master_gpio *master = to_fsi_master_gpio(_master);
-	unsigned long flags;
 
 	if (link != 0)
 		return -ENODEV;
-
-	spin_lock_irqsave(&fsi_gpio_cmd_lock, flags);
 	if (master->gpio_enable)
 		gpiod_set_value(master->gpio_enable, 1);
-	spin_unlock_irqrestore(&fsi_gpio_cmd_lock, flags);
 
 	return 0;
 }
