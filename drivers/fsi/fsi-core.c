@@ -450,7 +450,7 @@ static int fsi_slave_scan(struct fsi_slave *slave)
 			dev->addr = engine_addr;
 			dev->size = slots * engine_page_size;
 
-			dev_info(&slave->dev,
+			dev_dbg(&slave->dev,
 			"engine[%i]: type %x, version %x, addr %x size %x\n",
 					dev->unit, dev->engine_type, version,
 					dev->addr, dev->size);
@@ -690,7 +690,7 @@ static int fsi_slave_init(struct fsi_master *master, int link, uint8_t id)
 		return -EIO;
 	}
 
-	dev_info(&master->dev, "fsi: found chip %08x at %02x:%02x:%02x\n",
+	dev_dbg(&master->dev, "fsi: found chip %08x at %02x:%02x:%02x\n",
 			chip_id, master->idx, link, id);
 
 	rc = fsi_slave_set_smode(master, link, id);

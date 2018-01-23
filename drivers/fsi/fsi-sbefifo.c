@@ -894,7 +894,7 @@ static int sbefifo_probe(struct device *dev)
 	u32 up, down;
 	int ret, child_idx = 0;
 
-	dev_info(dev, "Found sbefifo device\n");
+	dev_dbg(dev, "Found sbefifo device\n");
 	sbefifo = kzalloc(sizeof(*sbefifo), GFP_KERNEL);
 	if (!sbefifo)
 		return -ENOMEM;
