@@ -2,13 +2,15 @@
  * A FSI master controller, using a simple GPIO bit-banging interface
  */
 
-#include <linux/platform_device.h>
-#include <linux/gpio/consumer.h>
-#include <linux/module.h>
+#include <linux/crc4.h>
 #include <linux/delay.h>
-#include <linux/fsi.h>
 #include <linux/device.h>
+#include <linux/fsi.h>
+#include <linux/gpio/consumer.h>
 #include <linux/io.h>
+#include <linux/module.h>
+#include <linux/of.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 
@@ -49,11 +51,10 @@
 #define	FSI_GPIO_MSG_RESPID_SIZE	2
 #define	FSI_GPIO_PRIME_SLAVE_CLOCKS	100
 
-static DEFINE_SPINLOCK(fsi_gpio_cmd_lock);	/* lock around fsi commands */
-
 struct fsi_master_gpio {
 	struct fsi_master	master;
 	struct device		*dev;
+	spinlock_t		cmd_lock;	/* Lock for commands */
 	struct gpio_desc	*gpio_clk;
 	struct gpio_desc	*gpio_data;
 	struct gpio_desc	*gpio_trans;	/* Voltage translator */
@@ -100,14 +101,12 @@ static void sda_out(struct fsi_master_gpio *master, int value)
 static void set_sda_input(struct fsi_master_gpio *master)
 {
 	gpiod_direction_input(master->gpio_data);
-	if (master->gpio_trans)
-		gpiod_set_value(master->gpio_trans, 0);
+	gpiod_set_value(master->gpio_trans, 0);
 }
 
 static void set_sda_output(struct fsi_master_gpio *master, int value)
 {
-	if (master->gpio_trans)
-		gpiod_set_value(master->gpio_trans, 1);
+	gpiod_set_value(master->gpio_trans, 1);
 	gpiod_direction_output(master->gpio_data, value);
 }
 
@@ -128,7 +127,7 @@ static void serial_in(struct fsi_master_gpio *master, struct fsi_gpio_msg *msg,
 		clock_toggle(master, 1);
 		in_bit = sda_in(master);
 		msg->msg <<= 1;
-		msg->msg |= ~in_bit & 0x1;	/* Data is negative active */
+		msg->msg |= ~in_bit & 0x1;	/* Data is active low */
 	}
 	msg->bits += num_bits;
 
@@ -139,7 +138,7 @@ static void serial_out(struct fsi_master_gpio *master,
 			const struct fsi_gpio_msg *cmd)
 {
 	uint8_t bit;
-	uint64_t msg = ~cmd->msg;	/* Data is negative active */
+	uint64_t msg = ~cmd->msg;	/* Data is active low */
 	uint64_t sda_mask = 0x1ULL << (cmd->bits - 1);
 	uint64_t last_bit = ~0;
 	int next_bit;
@@ -183,16 +182,17 @@ static void msg_push_crc(struct fsi_gpio_msg *msg)
 	top = msg->bits & 0x3;
 
 	/* start bit, and any non-aligned top bits */
-	crc = fsi_crc4(0,
-			1 << top | msg->msg >> (msg->bits - top),
-			top + 1);
+	crc = crc4(0, 1 << top | msg->msg >> (msg->bits - top), top + 1);
 
 	/* aligned bits */
-	crc = fsi_crc4(crc, msg->msg, msg->bits - top);
+	crc = crc4(crc, msg->msg, msg->bits - top);
 
 	msg_push_bits(msg, crc, 4);
 }
 
+/*
+ * Encode an Absolute Address command
+ */
 static void build_abs_ar_command(struct fsi_gpio_msg *cmd,
 		uint8_t id, uint32_t addr, size_t size, const void *data)
 {
@@ -269,7 +269,7 @@ static int read_one_response(struct fsi_master_gpio *master,
 		uint8_t data_size, struct fsi_gpio_msg *msgp, uint8_t *tagp)
 {
 	struct fsi_gpio_msg msg;
-	uint8_t id, tag;
+	uint8_t tag;
 	uint32_t crc;
 	int i;
 
@@ -281,7 +281,7 @@ static int read_one_response(struct fsi_master_gpio *master,
 		if (msg.msg)
 			break;
 	}
-	if (i >= FSI_GPIO_MTOE_COUNT) {
+	if (i == FSI_GPIO_MTOE_COUNT) {
 		dev_dbg(master->dev,
 			"Master time out waiting for response\n");
 		fsi_master_gpio_error(master, FSI_GPIO_MTOE);
@@ -294,12 +294,9 @@ static int read_one_response(struct fsi_master_gpio *master,
 	/* Read slave ID & response tag */
 	serial_in(master, &msg, 4);
 
-	id = (msg.msg >> FSI_GPIO_MSG_RESPID_SIZE) & 0x3;
 	tag = msg.msg & 0x3;
 
-	/* if we have an ACK, and we're expecting data, clock the
-	 * data in too
-	 */
+	/* If we have an ACK and we're expecting data, clock the data in too */
 	if (tag == FSI_GPIO_RESP_ACK && data_size)
 		serial_in(master, &msg, data_size * 8);
 
@@ -307,8 +304,8 @@ static int read_one_response(struct fsi_master_gpio *master,
 	serial_in(master, &msg, FSI_GPIO_CRC_SIZE);
 
 	/* we have a whole message now; check CRC */
-	crc = fsi_crc4(0, 1, 1);
-	crc = fsi_crc4(crc, msg.msg, msg.bits);
+	crc = crc4(0, 1, 1);
+	crc = crc4(crc, msg.msg, msg.bits);
 	if (crc) {
 		dev_dbg(master->dev, "ERR response CRC\n");
 		fsi_master_gpio_error(master, FSI_GPIO_CRC_INVAL);
@@ -334,7 +331,7 @@ static int issue_term(struct fsi_master_gpio *master, uint8_t slave)
 	echo_delay(master);
 
 	rc = read_one_response(master, 0, NULL, &tag);
-	if (rc) {
+	if (rc < 0) {
 		dev_err(master->dev,
 				"TERM failed; lost communication with slave\n");
 		return -EIO;
@@ -352,6 +349,7 @@ static int poll_for_response(struct fsi_master_gpio *master,
 	struct fsi_gpio_msg response, cmd;
 	int busy_count = 0, rc, i;
 	uint8_t tag;
+	uint8_t *data_byte = data;
 
 retry:
 	rc = read_one_response(master, size, &response, &tag);
@@ -367,8 +365,7 @@ retry:
 			val &= (1ull << (size * 8)) - 1;
 
 			for (i = 0; i < size; i++) {
-				((uint8_t *)data)[size-i-1] =
-					val & 0xff;
+				data_byte[size-i-1] = val;
 				val >>= 8;
 			}
 		}
@@ -413,11 +410,11 @@ static int fsi_master_gpio_xfer(struct fsi_master_gpio *master, uint8_t slave,
 	unsigned long flags;
 	int rc;
 
-	spin_lock_irqsave(&fsi_gpio_cmd_lock, flags);
+	spin_lock_irqsave(&master->cmd_lock, flags);
 	serial_out(master, cmd);
 	echo_delay(master);
 	rc = poll_for_response(master, slave, resp_len, resp);
-	spin_unlock_irqrestore(&fsi_gpio_cmd_lock, flags);
+	spin_unlock_irqrestore(&master->cmd_lock, flags);
 
 	return rc;
 }
@@ -461,9 +458,6 @@ static int fsi_master_gpio_term(struct fsi_master *_master,
 	return fsi_master_gpio_xfer(master, id, &cmd, 0, NULL);
 }
 
-/*
- * Issue a break command on link
- */
 static int fsi_master_gpio_break(struct fsi_master *_master, int link)
 {
 	struct fsi_master_gpio *master = to_fsi_master_gpio(_master);
@@ -490,12 +484,9 @@ static int fsi_master_gpio_break(struct fsi_master *_master, int link)
 
 static void fsi_master_gpio_init(struct fsi_master_gpio *master)
 {
-	if (master->gpio_mux)
-		gpiod_direction_output(master->gpio_mux, 1);
-	if (master->gpio_trans)
-		gpiod_direction_output(master->gpio_trans, 1);
-	if (master->gpio_enable)
-		gpiod_direction_output(master->gpio_enable, 1);
+	gpiod_direction_output(master->gpio_mux, 1);
+	gpiod_direction_output(master->gpio_trans, 1);
+	gpiod_direction_output(master->gpio_enable, 1);
 	gpiod_direction_output(master->gpio_clk, 1);
 	gpiod_direction_output(master->gpio_data, 1);
 
@@ -509,14 +500,9 @@ static int fsi_master_gpio_link_enable(struct fsi_master *_master, int link)
 
 	if (link != 0)
 		return -ENODEV;
-	if (master->gpio_enable)
-		gpiod_set_value(master->gpio_enable, 1);
+	gpiod_set_value(master->gpio_enable, 1);
 
 	return 0;
-}
-
-static void fsi_master_gpio_release(struct device *dev)
-{
 }
 
 static int fsi_master_gpio_probe(struct platform_device *pdev)
@@ -530,7 +516,6 @@ static int fsi_master_gpio_probe(struct platform_device *pdev)
 
 	master->dev = &pdev->dev;
 	master->master.dev.parent = master->dev;
-	master->master.dev.release = fsi_master_gpio_release;
 
 	gpio = devm_gpiod_get(&pdev->dev, "clock", 0);
 	if (IS_ERR(gpio)) {
@@ -576,12 +561,11 @@ static int fsi_master_gpio_probe(struct platform_device *pdev)
 	master->master.send_break = fsi_master_gpio_break;
 	master->master.link_enable = fsi_master_gpio_link_enable;
 	platform_set_drvdata(pdev, master);
+	spin_lock_init(&master->cmd_lock);
 
 	fsi_master_gpio_init(master);
 
-	fsi_master_register(&master->master);
-
-	return 0;
+	return fsi_master_register(&master->master);
 }
 
 
