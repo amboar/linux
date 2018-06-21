@@ -1454,6 +1454,16 @@
 };
 
 &scu_regs {
+	lpc_sio_decode_disable {
+		offset = <0x70>;
+		bit-mask = <0x1>;
+		bit-shift = <20>;
+	};
+	lpc_sio_decode_enable {
+		offset = <0x7c>;
+		bit-mask = <0x1>;
+		bit-shift = <20>;
+	};
 	vga_bmc_mmio_enable {
 		offset = <0x180>;
 		bit-mask = <0x1>;
