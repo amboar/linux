@@ -343,7 +343,7 @@
 						interrupts = <8>;
 					};
 
-					sio_regs: regs {
+					lpc_regs: regs {
 						compatible = "aspeed,bmc-misc";
 					};
 
@@ -1509,7 +1509,13 @@
 	};
 };
 
-&sio_regs {
+&lpc_regs {
+	ilpc_bridge_disable {
+		offset = <0x80>;
+		bit-mask = <0x1>;
+		bit-shift = <6>;
+		label = "ilpc-bridge-disable";
+	};
 	sio_2b {
 		offset = <0xf0>;
 		bit-mask = <0xff>;
