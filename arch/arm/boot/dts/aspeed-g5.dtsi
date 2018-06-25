@@ -173,6 +173,10 @@
 				vga_scratch: scratch {
 					compatible = "aspeed,bmc-misc";
 				};
+
+				scu_regs: regs {
+					compatible = "aspeed,bmc-misc";
+				};
 			};
 
 			rng: hwrng@1e6e2078 {
@@ -1446,6 +1450,14 @@
 	pinctrl_wdtrst2_default: wdtrst2_default {
 		function = "WDTRST2";
 		groups = "WDTRST2";
+	};
+};
+
+&scu_regs {
+	vga_bmc_mmio_enable {
+		offset = <0x180>;
+		bit-mask = <0x1>;
+		bit-shift = <1>;
 	};
 };
 
