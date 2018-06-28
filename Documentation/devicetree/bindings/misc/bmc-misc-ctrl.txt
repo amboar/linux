@@ -1,0 +1,84 @@
+BMC Miscellaneous Control Interfaces
+====================================
+
+Baseboard Management Controllers (BMCs) often have an array of hardware
+features that need to be described but are awkward to sensibly expose.
+
+This bindings document provides a generic mechanism for describing such
+features, covering read-only (RO), read-modify-write (RMW) and
+write-1-set/write-1-clear (W1SC) semantics.
+
+The bindings are similar in nature to register-bit-led.
+
+Required Properties
+-------------------
+
+compatible: 	Must be "bmc-misc-ctrl"
+
+offset:		A one or three cell property describing the registers
+		associated with the field.
+
+		If the optional property 'set-clear' is not present then the
+		node describes a register with read-modify-write semantics. The
+		offset property has one cell describing the register of
+		interest.
+
+		If the optional property 'set-clear' is present then the node
+		describes a register set that together implement read,
+		write-1-set and write-1-clear semantics. The offset property
+		must be three cells, the first is the address of the register
+		to read from, the second the write-1-set register and the third
+		write-1-clear.
+
+mask: 		A mask whose set bits represent the bits of the field.
+
+label:		The name of the field
+
+Optional Properties
+-------------------
+
+read-only:	Define a read-only field (RMW/W1SC irrelevant).
+
+set-clear:	Define whether the field exists in a RMW or W1SC register set
+
+default-value:	Single cell applicable to RMW. The field will be updated to the
+		cell's value.
+
+default-set:	For W1SC, set all bits in the field
+
+default-clear:	For W1SC, clear all bits in the field
+
+Examples
+--------
+
+Describing a single-bit field at offset 6 in a read-modify-write register:
+
+	field@80.6 {
+		compatible = "bmc-misc-ctrl";
+		offset = <0x80>;
+		mask = <0x40>;
+		label = "ilpc2ahb-disable";
+		value = <1>;
+	};
+
+Describing a single-bit field at offset 6 in a write-1-set/write-1-clear
+register set:
+
+	field@70.6 {
+		compatible = "bmc-misc-ctrl";
+		set-clear;
+		offset = <0x70 0x70 0x7c>
+		bit-mask = <0x40>;
+		default-set;
+		label = "lpc-sio-decode-disable";
+	};
+
+Describe a field comprising an entire read-only register:
+
+	field@50.0 {
+		compatible = "bmc-misc-ctrl";
+		offset = <0x50>;
+		mask = <0xffffffff>;
+		read-only;
+		label = "vga-scratch-1";
+	};
