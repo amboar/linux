@@ -147,6 +147,15 @@
 			interrupts = <2>;
 			clocks = <&syscon ASPEED_CLK_GATE_MAC1CLK>;
 			status = "disabled";
+
+		};
+
+		mdio0: mdio@1e660060 {
+			compatible = "aspeed,ast2500-mdio";
+			reg = <0x1e660060 0x8>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
 		};
 
 		mac1: ethernet@1e680000 {
@@ -154,6 +163,14 @@
 			reg = <0x1e680000 0x180>;
 			interrupts = <3>;
 			clocks = <&syscon ASPEED_CLK_GATE_MAC2CLK>;
+			status = "disabled";
+		};
+
+		mdio1: mdio@1e680060 {
+			compatible = "aspeed,ast2500-mdio";
+			reg = <0x1e680060 0x8>;
+			#address-cells = <1>;
+			#size-cells = <0>;
 			status = "disabled";
 		};
 

@@ -61,18 +61,38 @@
 	status = "okay";
 };
 
+&mdio0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mdio1_default>;
+
+        mac0phy: ethernet-phy@0 {
+                reg = <0>;
+        };
+};
+
 &mac0 {
 	status = "okay";
-
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_rgmii1_default &pinctrl_mdio1_default>;
+	phy = <&mac0phy>;
+};
+
+&mdio1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mdio2_default>;
+
+        mac1phy: ethernet-phy@0 {
+                reg = <0>;
+        };
 };
 
 &mac1 {
 	status = "okay";
-
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_rgmii2_default &pinctrl_mdio2_default>;
+	phy = <&mac1phy>;
 };
 
 &i2c3 {
