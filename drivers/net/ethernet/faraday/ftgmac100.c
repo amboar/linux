@@ -17,6 +17,7 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/of.h>
+#include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -86,7 +87,6 @@ struct ftgmac100 {
 	struct ncsi_dev *ndev;
 	struct napi_struct napi;
 	struct work_struct reset_task;
-	struct mii_bus *mii_bus;
 	struct clk *clk;
 
 	/* Link management */
@@ -1042,107 +1042,6 @@ static void ftgmac100_adjust_link(struct net_device *netdev)
 	schedule_work(&priv->reset_task);
 }
 
-static int ftgmac100_mii_probe(struct ftgmac100 *priv, phy_interface_t intf)
-{
-	struct net_device *netdev = priv->netdev;
-	struct phy_device *phydev;
-
-	phydev = phy_find_first(priv->mii_bus);
-	if (!phydev) {
-		netdev_info(netdev, "%s: no PHY found\n", netdev->name);
-		return -ENODEV;
-	}
-
-	phydev = phy_connect(netdev, phydev_name(phydev),
-			     &ftgmac100_adjust_link, intf);
-
-	if (IS_ERR(phydev)) {
-		netdev_err(netdev, "%s: Could not attach to PHY\n", netdev->name);
-		return PTR_ERR(phydev);
-	}
-
-	/* Indicate that we support PAUSE frames (see comment in
-	 * Documentation/networking/phy.txt)
-	 */
-	phy_support_asym_pause(phydev);
-
-	/* Display what we found */
-	phy_attached_info(phydev);
-
-	return 0;
-}
-
-static int ftgmac100_mdiobus_read(struct mii_bus *bus, int phy_addr, int regnum)
-{
-	struct net_device *netdev = bus->priv;
-	struct ftgmac100 *priv = netdev_priv(netdev);
-	unsigned int phycr;
-	int i;
-
-	phycr = ioread32(priv->base + FTGMAC100_OFFSET_PHYCR);
-
-	/* preserve MDC cycle threshold */
-	phycr &= FTGMAC100_PHYCR_MDC_CYCTHR_MASK;
-
-	phycr |= FTGMAC100_PHYCR_PHYAD(phy_addr) |
-		 FTGMAC100_PHYCR_REGAD(regnum) |
-		 FTGMAC100_PHYCR_MIIRD;
-
-	iowrite32(phycr, priv->base + FTGMAC100_OFFSET_PHYCR);
-
-	for (i = 0; i < 10; i++) {
-		phycr = ioread32(priv->base + FTGMAC100_OFFSET_PHYCR);
-
-		if ((phycr & FTGMAC100_PHYCR_MIIRD) == 0) {
-			int data;
-
-			data = ioread32(priv->base + FTGMAC100_OFFSET_PHYDATA);
-			return FTGMAC100_PHYDATA_MIIRDATA(data);
-		}
-
-		udelay(100);
-	}
-
-	netdev_err(netdev, "mdio read timed out\n");
-	return -EIO;
-}
-
-static int ftgmac100_mdiobus_write(struct mii_bus *bus, int phy_addr,
-				   int regnum, u16 value)
-{
-	struct net_device *netdev = bus->priv;
-	struct ftgmac100 *priv = netdev_priv(netdev);
-	unsigned int phycr;
-	int data;
-	int i;
-
-	phycr = ioread32(priv->base + FTGMAC100_OFFSET_PHYCR);
-
-	/* preserve MDC cycle threshold */
-	phycr &= FTGMAC100_PHYCR_MDC_CYCTHR_MASK;
-
-	phycr |= FTGMAC100_PHYCR_PHYAD(phy_addr) |
-		 FTGMAC100_PHYCR_REGAD(regnum) |
-		 FTGMAC100_PHYCR_MIIWR;
-
-	data = FTGMAC100_PHYDATA_MIIWDATA(value);
-
-	iowrite32(data, priv->base + FTGMAC100_OFFSET_PHYDATA);
-	iowrite32(phycr, priv->base + FTGMAC100_OFFSET_PHYCR);
-
-	for (i = 0; i < 10; i++) {
-		phycr = ioread32(priv->base + FTGMAC100_OFFSET_PHYCR);
-
-		if ((phycr & FTGMAC100_PHYCR_MIIWR) == 0)
-			return 0;
-
-		udelay(100);
-	}
-
-	netdev_err(netdev, "mdio write timed out\n");
-	return -EIO;
-}
-
 static void ftgmac100_get_drvinfo(struct net_device *netdev,
 				  struct ethtool_drvinfo *info)
 {
@@ -1389,8 +1288,6 @@ static void ftgmac100_reset_task(struct work_struct *work)
 	rtnl_lock();
 	if (netdev->phydev)
 		mutex_lock(&netdev->phydev->lock);
-	if (priv->mii_bus)
-		mutex_lock(&priv->mii_bus->mdio_lock);
 
 
 	/* Check if the interface is still up */
@@ -1418,8 +1315,6 @@ static void ftgmac100_reset_task(struct work_struct *work)
 
 	netdev_dbg(netdev, "Reset done !\n");
  bail:
-	if (priv->mii_bus)
-		mutex_unlock(&priv->mii_bus->mdio_lock);
 	if (netdev->phydev)
 		mutex_unlock(&netdev->phydev->lock);
 	rtnl_unlock();
@@ -1609,98 +1504,26 @@ static int ftgmac100_setup_mdio(struct net_device *netdev)
 {
 	struct ftgmac100 *priv = netdev_priv(netdev);
 	struct platform_device *pdev = to_platform_device(priv->dev);
-	int phy_intf = PHY_INTERFACE_MODE_RGMII;
 	struct device_node *np = pdev->dev.of_node;
-	int i, err = 0;
-	u32 reg;
-
-	/* initialize mdio bus */
-	priv->mii_bus = mdiobus_alloc();
-	if (!priv->mii_bus)
-		return -EIO;
+	struct phy_device *phy;
 
 	if (priv->is_aspeed) {
+		u32 reg;
 		/* This driver supports the old MDIO interface */
 		reg = ioread32(priv->base + FTGMAC100_OFFSET_REVR);
 		reg &= ~FTGMAC100_REVR_NEW_MDIO_INTERFACE;
 		iowrite32(reg, priv->base + FTGMAC100_OFFSET_REVR);
-	}
+	};
 
-	/* Get PHY mode from device-tree */
-	if (np) {
-		/* Default to RGMII. It's a gigabit part after all */
-		phy_intf = of_get_phy_mode(np);
-		if (phy_intf < 0)
-			phy_intf = PHY_INTERFACE_MODE_RGMII;
+	phy = of_phy_get_and_connect(netdev, np, NULL);
+	if (!phy)
+		return -ENODEV;
+	netdev->phydev = phy;
 
-		/* Aspeed only supports these. I don't know about other IP
-		 * block vendors so I'm going to just let them through for
-		 * now. Note that this is only a warning if for some obscure
-		 * reason the DT really means to lie about it or it's a newer
-		 * part we don't know about.
-		 *
-		 * On the Aspeed SoC there are additionally straps and SCU
-		 * control bits that could tell us what the interface is
-		 * (or allow us to configure it while the IP block is held
-		 * in reset). For now I chose to keep this driver away from
-		 * those SoC specific bits and assume the device-tree is
-		 * right and the SCU has been configured properly by pinmux
-		 * or the firmware.
-		 */
-		if (priv->is_aspeed &&
-		    phy_intf != PHY_INTERFACE_MODE_RMII &&
-		    phy_intf != PHY_INTERFACE_MODE_RGMII &&
-		    phy_intf != PHY_INTERFACE_MODE_RGMII_ID &&
-		    phy_intf != PHY_INTERFACE_MODE_RGMII_RXID &&
-		    phy_intf != PHY_INTERFACE_MODE_RGMII_TXID) {
-			netdev_warn(netdev,
-				   "Unsupported PHY mode %s !\n",
-				   phy_modes(phy_intf));
-		}
-	}
-
-	priv->mii_bus->name = "ftgmac100_mdio";
-	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%s-%d",
-		 pdev->name, pdev->id);
-	priv->mii_bus->parent = priv->dev;
-	priv->mii_bus->priv = priv->netdev;
-	priv->mii_bus->read = ftgmac100_mdiobus_read;
-	priv->mii_bus->write = ftgmac100_mdiobus_write;
-
-	for (i = 0; i < PHY_MAX_ADDR; i++)
-		priv->mii_bus->irq[i] = PHY_POLL;
-
-	err = mdiobus_register(priv->mii_bus);
-	if (err) {
-		dev_err(priv->dev, "Cannot register MDIO bus!\n");
-		goto err_register_mdiobus;
-	}
-
-	err = ftgmac100_mii_probe(priv, phy_intf);
-	if (err) {
-		dev_err(priv->dev, "MII Probe failed!\n");
-		goto err_mii_probe;
-	}
+	/* Display what we found */
+	phy_attached_info(phy);
 
 	return 0;
-
-err_mii_probe:
-	mdiobus_unregister(priv->mii_bus);
-err_register_mdiobus:
-	mdiobus_free(priv->mii_bus);
-	return err;
-}
-
-static void ftgmac100_destroy_mdio(struct net_device *netdev)
-{
-	struct ftgmac100 *priv = netdev_priv(netdev);
-
-	if (!netdev->phydev)
-		return;
-
-	phy_disconnect(netdev->phydev);
-	mdiobus_unregister(priv->mii_bus);
-	mdiobus_free(priv->mii_bus);
 }
 
 static void ftgmac100_ncsi_handler(struct ncsi_dev *nd)
@@ -1821,7 +1644,7 @@ static int ftgmac100_probe(struct platform_device *pdev)
 		priv->use_ncsi = false;
 		err = ftgmac100_setup_mdio(netdev);
 		if (err)
-			goto err_setup_mdio;
+			goto err_register_netdev;
 	}
 
 	if (priv->is_aspeed)
@@ -1859,8 +1682,6 @@ static int ftgmac100_probe(struct platform_device *pdev)
 
 err_ncsi_dev:
 err_register_netdev:
-	ftgmac100_destroy_mdio(netdev);
-err_setup_mdio:
 	iounmap(priv->base);
 err_ioremap:
 	release_resource(priv->res);
@@ -1886,8 +1707,6 @@ static int ftgmac100_remove(struct platform_device *pdev)
 	 * during stop, make sure it's gone before we free the structure.
 	 */
 	cancel_work_sync(&priv->reset_task);
-
-	ftgmac100_destroy_mdio(netdev);
 
 	iounmap(priv->base);
 	release_resource(priv->res);
