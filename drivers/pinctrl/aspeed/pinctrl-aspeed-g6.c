@@ -2362,7 +2362,6 @@ static int aspeed_g6_pinctrl_probe(struct platform_device *pdev)
 
 static const struct of_device_id aspeed_g6_pinctrl_of_match[] = {
 	{ .compatible = "aspeed,ast2600-pinctrl", },
-	{ .compatible = "aspeed,g6-pinctrl", },
 	{ },
 };
 
