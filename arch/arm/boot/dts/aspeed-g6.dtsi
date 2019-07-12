@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: GPL-2.0+
+// Copyright 2019 IBM Corp. 
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/clock/aspeed-clock.h>
+
+/ {
+	model = "Aspeed BMC";
+	compatible = "aspeed,ast2600";
+	#address-cells = <1>;
+	#size-cells = <1>;
+	interrupt-parent = <&gic>;
+
+	aliases {
+		serial4 = &uart5;
+	};
+
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		enable-method = "aspeed,ast2600-smp";
+
+		cpu@0 {
+			compatible = "arm,cortex-a7";
+			device_type = "cpu";
+			reg = <0>;
+		};
+
+		cpu@1 {
+			compatible = "arm,cortex-a7";
+			device_type = "cpu";
+			reg = <1>;
+		};
+	};
+
+        memory@80000000 {
+                device_type = "memory";
+                reg = <0x80000000 0>;
+        };
+
+	timer {
+		compatible = "arm,armv7-timer";
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>;
+		clocks = <&syscon ASPEED_CLK_HPLL>;
+		arm,cpu-registers-not-fw-configured;
+	};
+
+	ahb {
+		compatible = "simple-bus";
+                #address-cells = <1>;
+                #size-cells = <1>;
+                device_type = "soc";
+                ranges;
+
+                gic: interrupt-controller@40461000 {
+			compatible = "arm,cortex-a7-gic";
+			interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_HIGH)>;
+			#interrupt-cells = <3>;
+			interrupt-controller;
+			interrupt-parent = <&gic>;
+			reg = <0x40461000 0x1000>,
+			    <0x40462000 0x1000>,
+			    <0x40464000 0x2000>,
+			    <0x40466000 0x2000>;
+                };
+
+		apb {
+			compatible = "simple-bus";
+                        #address-cells = <1>;
+                        #size-cells = <1>;
+                        ranges;
+
+			syscon: syscon@1e6e2000 {
+				compatible = "aspeed,aspeed-scu", "aspeed,ast2600-scu", "syscon", "simple-mfd";
+                                reg = <0x1e6e2000 0x1000>;
+                                ranges = <0 0x1e6e2000 0x1000>;
+                                #address-cells = <1>;
+                                #size-cells = <1>;
+                                #clock-cells = <1>;
+                                #reset-cells = <1>;
+
+                                pinctrl: pinctrl {
+                                        compatible = "aspeed,ast2600-pinctrl";
+                                };
+
+
+				smp-memram@180 {
+					compatible = "aspeed,ast2600-smpmem";
+					reg = <0x180 0x40>;
+				};
+			};
+
+                        rtc: rtc@1e781000 {
+                                compatible = "aspeed,ast2600-rtc";
+                                reg = <0x1e781000 0x18>;
+                                interrupts = <GIC_SPI 13 IRQ_TYPE_LEVEL_HIGH>;
+                                status = "disabled";
+                        };
+
+                        uart5: serial@1e784000 {
+                                compatible = "ns16550a";
+                                reg = <0x1e784000 0x1000>;
+                                reg-shift = <2>;
+                                interrupts = <GIC_SPI 8 IRQ_TYPE_LEVEL_HIGH>;
+                                clocks = <&syscon ASPEED_CLK_GATE_UART5CLK>;
+                                clock-frequency = <1846154>;
+                                no-loopback-test;
+                        };
+
+                        wdt1: watchdog@1e785000 {
+                                compatible = "aspeed,ast2600-wdt";
+                                reg = <0x1e785000 0x40>;
+                                clocks = <&syscon ASPEED_CLK_APB>;
+                        };
+
+                        wdt2: watchdog@1e785040 {
+                                compatible = "aspeed,ast2600-wdt";
+                                reg = <0x1e785040 0x40>;
+                                clocks = <&syscon ASPEED_CLK_APB>;
+                        };
+
+                        wdt3: watchdog@1e785080 {
+                                compatible = "aspeed,ast2600-wdt";
+                                reg = <0x1e785080 0x40>;
+                                clocks = <&syscon ASPEED_CLK_APB>;
+                        };
+
+                        wdt4: watchdog@1e7850C0 {
+                                compatible = "aspeed,ast2600-wdt";
+                                reg = <0x1e7850C0 0x40>;
+                                clocks = <&syscon ASPEED_CLK_APB>;
+                        };
+		};
+	};
+};
