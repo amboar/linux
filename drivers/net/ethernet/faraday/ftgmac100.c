@@ -1817,7 +1817,12 @@ static int ftgmac100_probe(struct platform_device *pdev)
 		priv->ndev = ncsi_register_dev(netdev, ftgmac100_ncsi_handler);
 		if (!priv->ndev)
 			goto err_ncsi_dev;
-	} else {
+	} else if(np && !(of_get_property(np, "use-ncsi", NULL) ||
+				of_get_child_by_name(np, "mdio"))) {
+		/* Support legacy ASPEED devicetree descriptions that didn't
+		 * properly describe the MAC/MDIO/PHY hierarchy, partly due to
+		 * the Faraday design embedding the MDIO controller in the MAC.
+		 */
 		priv->use_ncsi = false;
 		err = ftgmac100_setup_mdio(netdev);
 		if (err)
