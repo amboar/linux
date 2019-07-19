@@ -21,6 +21,18 @@ config MDIO_BUS
 
 if MDIO_BUS
 
+config MDIO_ASPEED
+	tristate "ASPEED MDIO bus controller"
+	depends on ARCH_ASPEED || COMPILE_TEST
+	help
+	  This module provides a driver for the MDIO bus controllers found in
+	  the ASPEED AST2600 controller. This is a driver for the "new"
+	  register interface found embedded in the AST2400 and AST2500 MAC,
+	  which in the AST2600 has been moved out to its own IP block and
+	  stripped of the "old" register interface. For legacy reasons,
+	  FTGMAC100 driver continues to drive the embedded MDIO controller
+	  for the AST2400 and AST2500 SoCs.
+
 config MDIO_BCM_IPROC
 	tristate "Broadcom iProc MDIO bus controller"
 	depends on ARCH_BCM_IPROC || COMPILE_TEST
