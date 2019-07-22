@@ -1096,6 +1096,124 @@ static int ftgmac100_mii_probe(struct ftgmac100 *priv, phy_interface_t intf)
 	return 0;
 }
 
+#include <linux/bitfield.h>
+
+#define ASPEED_MDIO_CTRL		0x0
+#if 0
+#define   ASPEED_MDIO_CTRL_FIRE		BIT(31)
+#define   ASPEED_MDIO_CTRL_ST		BIT(28)
+#define     ASPEED_MDIO_CTRL_ST_C22	0
+#define     ASPEED_MDIO_CTRL_ST_C45	1
+#define   ASPEED_MDIO_CTRL_OP		GENMASK(27, 26)
+#define     MDIO_C22_OP_WRITE		0b01
+#define     MDIO_C22_OP_READ		0b10
+#define   ASPEED_MDIO_CTRL_PHYAD	GENMASK(25, 21)
+#define   ASPEED_MDIO_CTRL_REGAD	GENMASK(20, 16)
+#define   ASPEED_MDIO_CTRL_MIIWDATA	GENMASK(15, 0)
+#else
+#define   ASPEED_MDIO_CTRL_MIIWDATA	GENMASK(31, 16)
+#define   ASPEED_MDIO_CTRL_FIRE		BIT(15)
+#define   ASPEED_MDIO_CTRL_ST		BIT(12)
+#define     ASPEED_MDIO_CTRL_ST_C45	0
+#define     ASPEED_MDIO_CTRL_ST_C22	1
+#define   ASPEED_MDIO_CTRL_OP		GENMASK(11, 10)
+#define     MDIO_C22_OP_WRITE		0b01
+#define     MDIO_C22_OP_READ		0b10
+#define   ASPEED_MDIO_CTRL_PHYAD	GENMASK(9, 5)
+#define   ASPEED_MDIO_CTRL_REGAD	GENMASK(4, 0)
+#endif
+
+#define ASPEED_MDIO_DATA		0x4
+#define   ASPEED_MDIO_DATA_MDC_THRES	GENMASK(31, 24)
+#define   ASPEED_MDIO_DATA_MDIO_EDGE	BIT(23)
+#define   ASPEED_MDIO_DATA_MDIO_LATCH	GENMASK(22, 20)
+#define   ASPEED_MDIO_DATA_IDLE		BIT(16)
+#define   ASPEED_MDIO_DATA_MIIRDATA	GENMASK(15, 0)
+
+#if 0
+#define ASPEED_MDIO_RETRIES		10
+#endif
+#define ASPEED_MDIO_RETRIES		1
+
+struct aspeed_mdio {
+	void __iomem *base;
+};
+
+static int aspeed_mdio_read(struct mii_bus *bus, int addr, int regnum)
+{
+	struct aspeed_mdio *ctx = bus->priv;
+	u32 ctrl;
+	int i;
+
+	dev_dbg(&bus->dev, "%s: addr: %d, regnum: %d\n", __func__, addr,
+		regnum);
+
+	/* Just clause 22 for the moment */
+	ctrl = ASPEED_MDIO_CTRL_FIRE
+		| FIELD_PREP(ASPEED_MDIO_CTRL_ST, ASPEED_MDIO_CTRL_ST_C22)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_OP, MDIO_C22_OP_READ)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_PHYAD, addr)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_REGAD, regnum);
+
+	iowrite32(ctrl, ctx->base + ASPEED_MDIO_CTRL);
+
+	for (i = 0; i < ASPEED_MDIO_RETRIES; i++) {
+		u32 data;
+
+#if 0
+		data = ioread32(ctx->base + ASPEED_MDIO_DATA);
+		if (data & ASPEED_MDIO_DATA_IDLE)
+			return FIELD_GET(ASPEED_MDIO_DATA_MIIRDATA, data);
+#else
+		ctrl = ioread32(ctx->base + ASPEED_MDIO_CTRL);
+		if (!(ctrl & ASPEED_MDIO_CTRL_FIRE)) {
+			data = ioread32(ctx->base + ASPEED_MDIO_DATA);
+			return FIELD_GET(ASPEED_MDIO_DATA_MIIRDATA, data);
+		}
+#endif
+
+#if 0
+		udelay(100);
+#endif
+	}
+
+	dev_err(&bus->dev, "MDIO read failed\n");
+	return -EIO;
+}
+
+static int aspeed_mdio_write(struct mii_bus *bus, int addr, int regnum, u16 val)
+{
+	struct aspeed_mdio *ctx = bus->priv;
+	u32 ctrl;
+	int i;
+
+	dev_dbg(&bus->dev, "%s: addr: %d, regnum: %d, val: 0x%x\n",
+		__func__, addr, regnum, val);
+
+	/* Just clause 22 for the moment */
+	ctrl = ASPEED_MDIO_CTRL_FIRE
+		| FIELD_PREP(ASPEED_MDIO_CTRL_ST, ASPEED_MDIO_CTRL_ST_C22)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_OP, MDIO_C22_OP_WRITE)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_PHYAD, addr)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_REGAD, regnum)
+		| FIELD_PREP(ASPEED_MDIO_CTRL_MIIWDATA, val);
+
+	iowrite32(ctrl, ctx->base + ASPEED_MDIO_CTRL);
+
+	for (i = 0; i < ASPEED_MDIO_RETRIES; i++) {
+		ctrl = ioread32(ctx->base + ASPEED_MDIO_CTRL);
+		if (!(ctrl & ASPEED_MDIO_CTRL_FIRE))
+			return 0;
+
+#if 0
+		udelay(100);
+#endif
+	}
+
+	dev_err(&bus->dev, "MDIO write failed\n");
+	return -EIO;
+}
+
 static int ftgmac100_mdiobus_read(struct mii_bus *bus, int phy_addr, int regnum)
 {
 	struct net_device *netdev = bus->priv;
@@ -1103,6 +1221,21 @@ static int ftgmac100_mdiobus_read(struct mii_bus *bus, int phy_addr, int regnum)
 	unsigned int phycr;
 	int i;
 
+	struct aspeed_mdio dmdio = {
+		.base = priv->base + FTGMAC100_OFFSET_PHYCR,
+	};
+
+	struct mii_bus dbus = {
+		.owner = bus->owner,
+		.name = bus->name,
+		.priv = &dmdio,
+		.parent = bus->parent,
+		.dev = bus->dev,
+	};
+
+	return aspeed_mdio_read(&dbus, phy_addr, regnum);
+
+#if 0
 	phycr = ioread32(priv->base + FTGMAC100_OFFSET_PHYCR);
 
 	/* preserve MDC cycle threshold */
@@ -1129,6 +1262,7 @@ static int ftgmac100_mdiobus_read(struct mii_bus *bus, int phy_addr, int regnum)
 
 	netdev_err(netdev, "mdio read timed out\n");
 	return -EIO;
+#endif
 }
 
 static int ftgmac100_mdiobus_write(struct mii_bus *bus, int phy_addr,
@@ -1140,6 +1274,22 @@ static int ftgmac100_mdiobus_write(struct mii_bus *bus, int phy_addr,
 	int data;
 	int i;
 
+
+	struct aspeed_mdio dmdio = {
+		.base = priv->base + FTGMAC100_OFFSET_PHYCR,
+	};
+
+	struct mii_bus dbus = {
+		.owner = bus->owner,
+		.name = bus->name,
+		.priv = &dmdio,
+		.parent = bus->parent,
+		.dev = bus->dev,
+
+	};
+
+	return aspeed_mdio_write(&dbus, phy_addr, regnum, value);
+#if 0
 	phycr = ioread32(priv->base + FTGMAC100_OFFSET_PHYCR);
 
 	/* preserve MDC cycle threshold */
@@ -1165,6 +1315,7 @@ static int ftgmac100_mdiobus_write(struct mii_bus *bus, int phy_addr,
 
 	netdev_err(netdev, "mdio write timed out\n");
 	return -EIO;
+#endif
 }
 
 static void ftgmac100_get_drvinfo(struct net_device *netdev,
