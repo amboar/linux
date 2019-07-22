@@ -131,6 +131,25 @@ static int ftgmac100_reset_mac(struct ftgmac100 *priv, u32 maccr)
 	return -EIO;
 }
 
+static void ftgmac100_configure_mdio_iface(struct ftgmac100 *priv)
+{
+	u32 reg;
+
+	if (priv->is_aspeed) {
+#if 0
+		/* This driver supports the old MDIO interface */
+		reg = ioread32(priv->base + FTGMAC100_OFFSET_REVR);
+		reg &= ~FTGMAC100_REVR_NEW_MDIO_INTERFACE;
+		iowrite32(reg, priv->base + FTGMAC100_OFFSET_REVR);
+#else
+		/* Use the new MDIO interface */
+		reg = ioread32(priv->base + FTGMAC100_OFFSET_REVR);
+		reg |= FTGMAC100_REVR_NEW_MDIO_INTERFACE;
+		iowrite32(reg, priv->base + FTGMAC100_OFFSET_REVR);
+#endif
+	}
+}
+
 static int ftgmac100_reset_and_config_mac(struct ftgmac100 *priv)
 {
 	u32 maccr = 0;
@@ -162,7 +181,12 @@ static int ftgmac100_reset_and_config_mac(struct ftgmac100 *priv)
 	if (ftgmac100_reset_mac(priv, maccr))
 		return -EIO;
 	usleep_range(10, 1000);
-	return ftgmac100_reset_mac(priv, maccr);
+	if (ftgmac100_reset_mac(priv, maccr))
+		return -EIO;
+
+	ftgmac100_configure_mdio_iface(priv);
+
+	return 0;
 }
 
 static void ftgmac100_write_mac_addr(struct ftgmac100 *priv, const u8 *mac)
@@ -1619,12 +1643,7 @@ static int ftgmac100_setup_mdio(struct net_device *netdev)
 	if (!priv->mii_bus)
 		return -EIO;
 
-	if (priv->is_aspeed) {
-		/* This driver supports the old MDIO interface */
-		reg = ioread32(priv->base + FTGMAC100_OFFSET_REVR);
-		reg &= ~FTGMAC100_REVR_NEW_MDIO_INTERFACE;
-		iowrite32(reg, priv->base + FTGMAC100_OFFSET_REVR);
-	}
+	ftgmac100_configure_mdio_iface(priv);
 
 	/* Get PHY mode from device-tree */
 	if (np) {
