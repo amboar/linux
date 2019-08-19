@@ -39,6 +39,14 @@
         phy-handle = <&ethphy1>;
 };
 
+&sdc {
+	status = "okay";
+};
+
+&sdhci0 {
+	status = "okay";
+};
+
 &emmc {
 	status = "okay";
 };
