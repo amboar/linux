@@ -251,7 +251,7 @@
 					interrupts = <GIC_SPI 15 IRQ_TYPE_LEVEL_HIGH>;
 					clocks = <&syscon ASPEED_CLK_EMMC>;
 					pinctrl-names = "default";
-					pinctrl-0 = <&pinctrl_emmc_default>;
+					pinctrl-0 = <&pinctrl_sd3_default>;
 				};
 			};
 		};
