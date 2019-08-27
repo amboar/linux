@@ -964,6 +964,7 @@ static void mmc_set_bus_speed(struct mmc_card *card)
 {
 	unsigned int max_dtr = (unsigned int)-1;
 
+#if 0
 	if ((mmc_card_hs200(card) || mmc_card_hs400(card)) &&
 	     max_dtr > card->ext_csd.hs200_max_dtr)
 		max_dtr = card->ext_csd.hs200_max_dtr;
@@ -971,6 +972,9 @@ static void mmc_set_bus_speed(struct mmc_card *card)
 		max_dtr = card->ext_csd.hs_max_dtr;
 	else if (max_dtr > card->csd.max_dtr)
 		max_dtr = card->csd.max_dtr;
+#else
+	max_dtr = 52000000;
+#endif
 
 	mmc_set_clock(card->host, max_dtr);
 }
