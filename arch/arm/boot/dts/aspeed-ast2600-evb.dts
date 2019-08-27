@@ -39,14 +39,9 @@
         phy-handle = <&ethphy1>;
 };
 
-&sdc {
-	status = "okay";
-};
-
-&sdhci0 {
-	status = "okay";
-};
-
 &emmc {
 	status = "okay";
+        non-removable;
+        bus-width = <4>;
+        clock-frequency = <52000000>;
 };
