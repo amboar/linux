@@ -6,8 +6,7 @@
 
 #include <linux/irqreturn.h>
 #include <linux/module.h>
-
-#include "kcs_bmc.h"
+#include <linux/kcs_bmc.h>
 
 struct kcs_bmc_driver;
 
