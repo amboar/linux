@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/aspeed,ast2400-uhci.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Aspeed (not so) Universal Host Controller Interface
+
+maintainers:
+  - Andrew Jeffery <andrew@codeconstruct.com.au>
+
+description: |
+  The Aspeed UHCI controllers have quirks with e.g. register layout that
+  requires remapping by otherwise generic driver implementations.
+
+allOf:
+  - $ref: usb.yaml#
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - aspeed,ast2400-uhci
+          - aspeed,ast2500-uhci
+          - aspeed,ast2600-uhci
+      - const: generic-uhci
+
+additionalProperties: true
+
+examples:
+  - |
+    uhci: usb@1e6b0000 {
+        compatible = "aspeed,ast2400-uhci", "generic-uhci";
+        reg = <0x1e6b0000 0x100>;
+        interrupts = <14>;
+        #ports = <3>;
+        clocks = <&syscon ASPEED_CLK_GATE_USBUHCICLK>;
+        status = "disabled";
+    };
