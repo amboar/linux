@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/aspeed,ast2400-p2a-ctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Aspeed PCI2AHB (P2A) Bridge Controller
+
+maintainers:
+  - Andrew Jeffery <andrew@codeconstruct.com.au>
+
+description: |
+  The P2A bridge is available on platforms with the VGA enabled on the Aspeed
+  device. In this case, the host has access to a relocatable 64KiB window into
+  the BMC's physical address space. However, the BMC can disable this bridge.
+  If the bridge is enabled, the host has read access to all regions of memory,
+  however the host only write access to a defined set of regions controlled by
+  the BMC.
+
+properties:
+  compatible:
+    enum:
+      - aspeed,ast2400-p2a-ctrl
+      - aspeed,ast2500-p2a-ctrl
+
+  reg:
+    maxItems: 1
+
+  memory-region: true
+
+additionalProperties: false
+
+required:
+  - compatible
+
+examples:
+  - |
+    p2a: p2a-control {
+        compatible = "aspeed,ast2400-p2a-ctrl";
+        memory-region = <&reserved_memory>;
+    };
