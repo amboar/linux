@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/aspeed,ast2400-video-engine.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Aspeed Video Engine
+
+maintainers:
+  - Eddie James <eajames@linux.ibm.com>
+  - Andrew Jeffery <andrew@codeconstruct.com.au>
+
+description: |
+  The Video Engine embedded in the Aspeed AST2400/AST2500/AST2600 SoCs can
+  capture and compress video data from digital or analog sources
+
+properties:
+  compatible:
+    enum:
+      - aspeed,ast2400-video-engine
+      - aspeed,ast2500-video-engine
+      - aspeed,ast2600-video-engine
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    minItems: 1
+    maxItems: 2
+    description: |
+      Clock specifiers for the syscon clocks associated with the video engine.
+      Ordering must match the clock-names property.
+
+  clock-names:
+    minItems: 1
+    items:
+      - const: vclk
+      - const: eclk
+
+  interrupts:
+    maxItems: 1
+
+  memory-region:
+    description: A phandle to a reserved-memory region from which to allocate.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/aspeed-clock.h>
+    video-engine@1e700000 {
+        compatible = "aspeed,ast2500-video-engine";
+        reg = <0x1e700000 0x20000>;
+        clocks = <&syscon ASPEED_CLK_GATE_VCLK>, <&syscon ASPEED_CLK_GATE_ECLK>;
+        clock-names = "vclk", "eclk";
+        interrupts = <7>;
+        memory-region = <&video_engine_memory>;
+    };
