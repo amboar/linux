@@ -163,8 +163,7 @@ required:
   - "#size-cells"
   - ranges
 
-additionalProperties:
-  type: object
+additionalProperties: true
 
 examples:
   - |
