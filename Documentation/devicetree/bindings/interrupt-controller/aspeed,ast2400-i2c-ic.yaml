@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/aspeed,ast2400-i2c-ic.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Aspeed I2C Interrupt Controller
+
+maintainers:
+  - Andrew Jeffery <andrew@codeconstruct.com.au>
+
+description: |
+  The Aspeed I2C controller contains an interrupt controller as a sub-block,
+  managing interrupts for each of the I2C engines contained in the controller.
+
+properties:
+  compatible:
+    enum:
+      - aspeed,ast2400-i2c-ic
+      - aspeed,ast2500-i2c-ic
+
+  reg:
+    maxItems: 1
+
+  "#interrupt-cells":
+    const: 1
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-controller: true
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c_ic: interrupt-controller@0 {
+        compatible = "aspeed,ast2400-i2c-ic";
+        reg = <0x0 0x40>;
+        #interrupt-cells = <1>;
+        interrupts = <12>;
+        interrupt-controller;
+    };
