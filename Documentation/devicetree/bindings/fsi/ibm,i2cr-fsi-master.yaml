@@ -22,11 +22,63 @@ properties:
   reg:
     maxItems: 1
 
+  "#address-cells":
+    const: 2
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "cfam@[0-9a-f],[0-9a-f]":
+    type: object
+    properties:
+      chip-id:
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      reg:
+        maxItems: 1
+
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 1
+
+    additionalProperties: true
+
+  "scom@[0-9a-f]+":
+    type: object
+    properties:
+      compatible:
+        const: ibm,i2cr-scom
+
+      reg:
+        maxItems: 1
+
+    additionalProperties: false
+
+  "sbefifo@[0-9a-f]+":
+    type: object
+    properties:
+      compatible:
+        const: ibm,p9-sbefifo
+
+      reg:
+        maxItems: 1
+
+      "#address-cells":
+        const: 1
+
+      "#size-cells":
+        const: 0
+
+    additionalProperties: false
+
 required:
   - compatible
   - reg
 
-additionalProperties: false
+additionalProperties: true
 
 examples:
   - |
