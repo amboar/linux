@@ -23,21 +23,27 @@
 		};
 	};
 
-	intc0_11: interrupt-controller@12101b00 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x12101b00 0x0 0x10>;
+	intc0: interrupt-controller@12100000 {
+		compatible = "aspeed,ast2700-intc0";
+		reg = <0x0 0x12100000 0x0 0x4000>;
 		#interrupt-cells = <1>;
 		interrupt-controller;
-		interrupts = <GIC_SPI 192 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 193 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 194 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 196 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 197 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 199 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 200 IRQ_TYPE_LEVEL_HIGH>,
-				<GIC_SPI 201 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-parent = <&gic>;
+        aspeed,interrupt-ranges =
+            <0 128 &gic GIC_SPI 0 IRQ_TYPE_LEVEL_HIGH>, /* linear range 1 to 1*/
+            <144 8 &gic GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>, /* sw int SSP */
+            <152 8 &gic GIC_SPI 152 IRQ_TYPE_LEVEL_HIGH>, /* sw int TSP */
+            <192 10 &gic GIC_SPI 192 IRQ_TYPE_LEVEL_HIGH>, /* M0-M9 intm */
+            <208 10 &gic GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>, /* M30-M39 intm */
+            <224 10 &gic GIC_SPI 224 IRQ_TYPE_LEVEL_HIGH>, /* M40-M49 intm */
+            <256 128 &ssp_nvic 0 0 >, /* linear to SSP */
+            <384 10 &ssp_nvic 160 0 >, /* cascaded to SSP via M10-M19 */
+            <400 8 &ssp_nvic 144 0 >, /* sw int PSP */
+            <408 8 &ssp_nvic 152 0 >, /* sw int TSP */
+            <426 128 &tsp_nvic 0 0 >, /* linear to TSP */
+            <554 10 &tsp_nvic 160 0 >, /* cascaded to TSP via M20-M29 */
+            <570 8 &tsp_nvic 144 0 >, /* sw int PSP */
+            <578 8 &tsp_nvic 152 0 >; /* sw int TSP */
 	};
 
 	syscon0: syscon@12c02000 {
@@ -122,7 +128,7 @@
 			compatible = "aspeed,ast2700-scu-ic2";
 			reg = <0x100 0x8>;
 			#interrupt-cells = <1>;
-			interrupts-extended = <&intc1_5 0>;
+			interrupts-extended = <&intc1 160>;
 			interrupt-controller;
 		};
 
@@ -130,7 +136,7 @@
 			compatible = "aspeed,ast2700-scu-ic3";
 			reg = <0x108 0x8>;
 			#interrupt-cells = <1>;
-			interrupts-extended = <&intc1_5 26>;
+			interrupts-extended = <&intc1 186>;
 			interrupt-controller;
 		};
 	};
@@ -140,59 +146,26 @@
 		gpio-controller;
 		compatible = "aspeed,ast2700-gpio";
 		reg = <0x0 0x14c0b000 0x0 0x1000>;
-		interrupts-extended = <&intc1_2 18>;
+		interrupts-extended = <&intc1 82>;
 		ngpios = <216>;
 		clocks = <&syscon1 SCU1_CLK_AHB>;
 		interrupt-controller;
 		#interrupt-cells = <2>;
 	};
 
-	intc1_0: interrupt-controller@14c18100 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x14c18100 0x0 0x10>;
+	intc1: interrupt-controller@14c18000 {
+		compatible = "aspeed,ast2700-intc1";
+		reg = <0x0 0x14c18000 0x0 0x1000>;
 		#interrupt-cells = <1>;
 		interrupt-controller;
-		interrupts-extended = <&intc0_11 0>;
-	};
-
-	intc1_1: interrupt-controller@14c18110 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x14c18110 0x0 0x10>;
-		#interrupt-cells = <1>;
-		interrupt-controller;
-		interrupts-extended = <&intc0_11 1>;
-	};
-
-	intc1_2: interrupt-controller@14c18120 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x14c18120 0x0 0x10>;
-		#interrupt-cells = <1>;
-		interrupt-controller;
-		interrupts-extended = <&intc0_11 2>;
-	};
-
-	intc1_3: interrupt-controller@14c18130 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x14c18130 0x0 0x10>;
-		#interrupt-cells = <1>;
-		interrupt-controller;
-		interrupts-extended = <&intc0_11 3>;
-	};
-
-	intc1_4: interrupt-controller@14c18140 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x14c18140 0x0 0x10>;
-		#interrupt-cells = <1>;
-		interrupt-controller;
-		interrupts-extended = <&intc0_11 4>;
-	};
-
-	intc1_5: interrupt-controller@14c18150 {
-		compatible = "aspeed,ast2700-intc-ic";
-		reg = <0x0 0x14c18150 0x0 0x10>;
-		#interrupt-cells = <1>;
-		interrupt-controller;
-		interrupts-extended = <&intc0_11 5>;
+		interrupt-parent = <&intc0>;
+		aspeed,interrupt-ranges =
+			<0 6 &intc0 480>,   /* M0  ~ M5  */
+			<10 6 &intc0 490>,   /* M10 ~ M15  */
+			<20 6 &intc0 500>,   /* M20 ~ M15  */
+			<30 6 &intc0 510>,   /* M30 ~ M15  */
+			<40 6 &intc0 520>,   /* M40 ~ M15  */
+			<50 1 &bootmcu_plic 0>; /* only 1 pin to BootMCU */
 	};
 
 	uart0: serial@14c33000 {
@@ -201,7 +174,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART0CLK>;
-		interrupts-extended = <&intc1_4 7>;
+		interrupts-extended = <&intc1 135>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -212,7 +185,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART1CLK>;
-		interrupts-extended = <&intc1_4 8>;
+		interrupts-extended = <&intc1 136>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -223,7 +196,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART2CLK>;
-		interrupts-extended = <&intc1_4 9>;
+		interrupts-extended = <&intc1 137>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -234,7 +207,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART3CLK>;
-		interrupts-extended = <&intc1_4 10>;
+		interrupts-extended = <&intc1 138>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -245,7 +218,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART5CLK>;
-		interrupts-extended = <&intc1_4 11>;
+		interrupts-extended = <&intc1 139>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -256,7 +229,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART6CLK>;
-		interrupts-extended = <&intc1_4 12>;
+		interrupts-extended = <&intc1 140>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -267,7 +240,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART7CLK>;
-		interrupts-extended = <&intc1_4 13>;
+		interrupts-extended = <&intc1 141>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -278,7 +251,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART8CLK>;
-		interrupts-extended = <&intc1_4 14>;
+		interrupts-extended = <&intc1 142>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -289,7 +262,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART9CLK>;
-		interrupts-extended = <&intc1_4 15>;
+		interrupts-extended = <&intc1 143>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -300,7 +273,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART10CLK>;
-		interrupts-extended = <&intc1_4 16>;
+		interrupts-extended = <&intc1 144>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -311,7 +284,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART11CLK>;
-		interrupts-extended = <&intc1_4 17>;
+		interrupts-extended = <&intc1 145>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -322,7 +295,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_GATE_UART12CLK>;
-		interrupts-extended = <&intc1_4 18>;
+		interrupts-extended = <&intc1 146>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -333,7 +306,7 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_UART13>;
-		interrupts-extended = <&intc1_0 23>;
+		interrupts-extended = <&intc1 23>;
 		no-loopback-test;
 		status = "disabled";
 	};
@@ -344,8 +317,49 @@
 		reg-shift = <2>;
 		reg-io-width = <4>;
 		clocks = <&syscon1 SCU1_CLK_UART14>;
-		interrupts-extended = <&intc1_1 23>;
+		interrupts-extended = <&intc1 55>;
 		no-loopback-test;
 		status = "disabled";
+	};
+
+	secondary {
+		#address-cells = <1>;
+		/* https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/of/address.c?h=v6.16#n491 */
+		#size-cells = <0>;
+		/* https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/of/address.c?h=v6.16#n430 */
+
+		ssp_nvic: interrupt-controller@e000e100 {
+			compatible = "arm,v7m-nvic";
+			reg = <0xe000e100>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			status = "disabled";
+		};
+	};
+
+	tertiary {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		tsp_nvic: interrupt-controller@e000e100 {
+			compatible = "arm,v7m-nvic";
+			reg = <0xe000e100>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			status = "disabled";
+		};
+	};
+
+	bootmcu {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		bootmcu_plic: interrupt-controller@d000000 {
+			compatible = "riscv,aplic";
+			reg = <0xd000000>;
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			status = "disabled";
+		};
 	};
 };

@@ -26,6 +26,10 @@
 	};
 };
 
+&gpio0 {
+	status = "okay";
+};
+
 &uart12 {
 	status = "okay";
 };
