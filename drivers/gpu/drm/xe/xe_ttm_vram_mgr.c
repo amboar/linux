@@ -12,7 +12,6 @@
 
 #include "xe_bo.h"
 #include "xe_device.h"
-#include "xe_gt.h"
 #include "xe_res_cursor.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vram_types.h"
@@ -82,6 +81,9 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 	if (place->flags & TTM_PL_FLAG_TOPDOWN)
 		vres->flags |= DRM_BUDDY_TOPDOWN_ALLOCATION;
 
+	if (place->flags & TTM_PL_FLAG_CONTIGUOUS)
+		vres->flags |= DRM_BUDDY_CONTIGUOUS_ALLOCATION;
+
 	if (place->fpfn || lpfn != man->size >> PAGE_SHIFT)
 		vres->flags |= DRM_BUDDY_RANGE_ALLOCATION;
 
@@ -111,24 +113,11 @@ static int xe_ttm_vram_mgr_new(struct ttm_resource_manager *man,
 		goto error_unlock;
 	}
 
-	if (place->fpfn + (size >> PAGE_SHIFT) != lpfn &&
-	    place->flags & TTM_PL_FLAG_CONTIGUOUS) {
-		size = roundup_pow_of_two(size);
-		min_page_size = size;
-
-		lpfn = max_t(unsigned long, place->fpfn + (size >> PAGE_SHIFT), lpfn);
-	}
-
 	err = drm_buddy_alloc_blocks(mm, (u64)place->fpfn << PAGE_SHIFT,
 				     (u64)lpfn << PAGE_SHIFT, size,
 				     min_page_size, &vres->blocks, vres->flags);
 	if (err)
 		goto error_unlock;
-
-	if (place->flags & TTM_PL_FLAG_CONTIGUOUS) {
-		if (!drm_buddy_block_trim(mm, NULL, vres->base.size, &vres->blocks))
-			size = vres->base.size;
-	}
 
 	if (lpfn <= mgr->visible_size >> PAGE_SHIFT) {
 		vres->used_visible_size = size;

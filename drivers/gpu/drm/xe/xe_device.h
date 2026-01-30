@@ -12,6 +12,8 @@
 #include "xe_gt_types.h"
 #include "xe_sriov.h"
 
+struct xe_vm;
+
 static inline struct xe_device *to_xe_device(const struct drm_device *dev)
 {
 	return container_of(dev, struct xe_device, drm);
@@ -59,13 +61,6 @@ static inline struct xe_tile *xe_device_get_root_tile(struct xe_device *xe)
 {
 	return &xe->tiles[0];
 }
-
-/*
- * Highest GT/tile count for any platform.  Used only for memory allocation
- * sizing.  Any logic looping over GTs or mapping userspace GT IDs into GT
- * structures should use the per-platform xe->info.max_gt_per_tile instead.
- */
-#define XE_MAX_GT_PER_TILE 2
 
 static inline struct xe_gt *xe_device_get_gt(struct xe_device *xe, u8 gt_id)
 {
@@ -172,6 +167,11 @@ static inline bool xe_device_has_lmtt(struct xe_device *xe)
 	return IS_DGFX(xe);
 }
 
+static inline bool xe_device_has_mert(struct xe_device *xe)
+{
+	return xe->info.has_mert;
+}
+
 u32 xe_device_ccs_bytes(struct xe_device *xe, u64 size);
 
 void xe_device_snapshot_print(struct xe_device *xe, struct drm_printer *p);
@@ -189,11 +189,17 @@ static inline bool xe_device_wedged(struct xe_device *xe)
 
 void xe_device_set_wedged_method(struct xe_device *xe, unsigned long method);
 void xe_device_declare_wedged(struct xe_device *xe);
+int xe_device_validate_wedged_mode(struct xe_device *xe, unsigned int mode);
+const char *xe_wedged_mode_to_string(enum xe_wedged_mode mode);
 
 struct xe_file *xe_file_get(struct xe_file *xef);
 void xe_file_put(struct xe_file *xef);
 
 int xe_is_injection_active(void);
+
+bool xe_is_xe_file(const struct file *file);
+
+struct xe_vm *xe_device_asid_to_vm(struct xe_device *xe, u32 asid);
 
 /*
  * Occasionally it is seen that the G2H worker starts running after a delay of more than

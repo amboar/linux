@@ -1609,26 +1609,38 @@ out:
 	return ret;
 }
 
-static int can_open_delegated(struct nfs_delegation *delegation, fmode_t fmode,
-		enum open_claim_type4 claim)
+static bool can_open_delegated(const struct inode *inode, fmode_t fmode,
+		enum open_claim_type4 claim, nfs4_stateid *stateid)
 {
-	if (delegation == NULL)
-		return 0;
+	struct nfs_delegation *delegation;
+	bool ret = false;
+
+	delegation = nfs4_get_valid_delegation(inode);
+	if (!delegation)
+		return false;
 	if ((delegation->type & fmode) != fmode)
-		return 0;
+		goto out_put_delegation;
+
 	switch (claim) {
-	case NFS4_OPEN_CLAIM_NULL:
-	case NFS4_OPEN_CLAIM_FH:
-		break;
 	case NFS4_OPEN_CLAIM_PREVIOUS:
-		if (!test_bit(NFS_DELEGATION_NEED_RECLAIM, &delegation->flags))
+		if (test_bit(NFS_DELEGATION_NEED_RECLAIM, &delegation->flags))
 			break;
 		fallthrough;
+	case NFS4_OPEN_CLAIM_NULL:
+	case NFS4_OPEN_CLAIM_FH:
+		nfs_mark_delegation_referenced(delegation);
+		/* Save the delegation stateid */
+		if (stateid)
+			nfs4_stateid_copy(stateid, &delegation->stateid);
+		ret = true;
+		break;
 	default:
-		return 0;
+		break;
 	}
-	nfs_mark_delegation_referenced(delegation);
-	return 1;
+
+out_put_delegation:
+	nfs_put_delegation(delegation);
+	return ret;
 }
 
 static void update_open_stateflags(struct nfs4_state *state, fmode_t fmode)
@@ -1896,17 +1908,17 @@ int update_open_stateid(struct nfs4_state *state,
 {
 	struct nfs_server *server = NFS_SERVER(state->inode);
 	struct nfs_client *clp = server->nfs_client;
-	struct nfs_inode *nfsi = NFS_I(state->inode);
 	struct nfs_delegation *deleg_cur;
 	nfs4_stateid freeme = { };
 	int ret = 0;
 
 	fmode &= (FMODE_READ|FMODE_WRITE);
 
-	rcu_read_lock();
 	spin_lock(&state->owner->so_lock);
 	if (open_stateid != NULL) {
+		rcu_read_lock();
 		nfs_state_set_open_stateid(state, open_stateid, fmode, &freeme);
+		rcu_read_unlock();
 		ret = 1;
 	}
 
@@ -1915,7 +1927,7 @@ int update_open_stateid(struct nfs4_state *state,
 		goto no_delegation;
 
 	spin_lock(&deleg_cur->lock);
-	if (rcu_dereference(nfsi->delegation) != deleg_cur ||
+	if (!deleg_cur->inode ||
 	   test_bit(NFS_DELEGATION_RETURNING, &deleg_cur->flags) ||
 	    (deleg_cur->type & fmode) != fmode)
 		goto no_delegation_unlock;
@@ -1930,11 +1942,11 @@ int update_open_stateid(struct nfs4_state *state,
 	ret = 1;
 no_delegation_unlock:
 	spin_unlock(&deleg_cur->lock);
+	nfs_put_delegation(deleg_cur);
 no_delegation:
 	if (ret)
 		update_open_stateflags(state, fmode);
 	spin_unlock(&state->owner->so_lock);
-	rcu_read_unlock();
 
 	if (test_bit(NFS_STATE_RECLAIM_NOGRACE, &state->flags))
 		nfs4_schedule_state_manager(clp);
@@ -1968,20 +1980,17 @@ static void nfs4_return_incompatible_delegation(struct inode *inode, fmode_t fmo
 	struct nfs_delegation *delegation;
 
 	fmode &= FMODE_READ|FMODE_WRITE;
-	rcu_read_lock();
 	delegation = nfs4_get_valid_delegation(inode);
-	if (delegation == NULL || (delegation->type & fmode) == fmode) {
-		rcu_read_unlock();
+	if (!delegation)
 		return;
-	}
-	rcu_read_unlock();
-	nfs4_inode_return_delegation(inode);
+	if ((delegation->type & fmode) != fmode)
+		nfs4_inode_return_delegation(inode);
+	nfs_put_delegation(delegation);
 }
 
 static struct nfs4_state *nfs4_try_open_cached(struct nfs4_opendata *opendata)
 {
 	struct nfs4_state *state = opendata->state;
-	struct nfs_delegation *delegation;
 	int open_mode = opendata->o_arg.open_flags;
 	fmode_t fmode = opendata->o_arg.fmode;
 	enum open_claim_type4 claim = opendata->o_arg.claim;
@@ -1996,15 +2005,10 @@ static struct nfs4_state *nfs4_try_open_cached(struct nfs4_opendata *opendata)
 			goto out_return_state;
 		}
 		spin_unlock(&state->owner->so_lock);
-		rcu_read_lock();
-		delegation = nfs4_get_valid_delegation(state->inode);
-		if (!can_open_delegated(delegation, fmode, claim)) {
-			rcu_read_unlock();
+
+		if (!can_open_delegated(state->inode, fmode, claim, &stateid))
 			break;
-		}
-		/* Save the delegation */
-		nfs4_stateid_copy(&stateid, &delegation->stateid);
-		rcu_read_unlock();
+
 		nfs_release_seqid(opendata->o_arg.seqid);
 		if (!opendata->is_recover) {
 			ret = nfs_may_open(state->inode, state->owner->so_cred, open_mode);
@@ -2556,16 +2560,14 @@ static void nfs4_open_prepare(struct rpc_task *task, void *calldata)
 	 * a delegation instead.
 	 */
 	if (data->state != NULL) {
-		struct nfs_delegation *delegation;
-
 		if (can_open_cached(data->state, data->o_arg.fmode,
 					data->o_arg.open_flags, claim))
 			goto out_no_action;
-		rcu_read_lock();
-		delegation = nfs4_get_valid_delegation(data->state->inode);
-		if (can_open_delegated(delegation, data->o_arg.fmode, claim))
-			goto unlock_no_action;
-		rcu_read_unlock();
+		if (can_open_delegated(data->state->inode, data->o_arg.fmode,
+				claim, NULL)) {
+			trace_nfs4_cached_open(data->state);
+			goto out_no_action;
+		}
 	}
 	/* Update client id. */
 	data->o_arg.clientid = clp->cl_clientid;
@@ -2601,9 +2603,7 @@ static void nfs4_open_prepare(struct rpc_task *task, void *calldata)
 			data->o_arg.createmode = NFS4_CREATE_GUARDED;
 	}
 	return;
-unlock_no_action:
-	trace_nfs4_cached_open(data->state);
-	rcu_read_unlock();
+
 out_no_action:
 	task->tk_action = NULL;
 out_wait:
@@ -8172,32 +8172,11 @@ static int nfs4_xattr_get_nfs4_label(const struct xattr_handler *handler,
 	return -EOPNOTSUPP;
 }
 
-static ssize_t
-nfs4_listxattr_nfs4_label(struct inode *inode, char *list, size_t list_len)
-{
-	int len = 0;
-
-	if (nfs_server_capable(inode, NFS_CAP_SECURITY_LABEL)) {
-		len = security_inode_listsecurity(inode, list, list_len);
-		if (len >= 0 && list_len && len > list_len)
-			return -ERANGE;
-	}
-	return len;
-}
-
 static const struct xattr_handler nfs4_xattr_nfs4_label_handler = {
 	.prefix = XATTR_SECURITY_PREFIX,
 	.get	= nfs4_xattr_get_nfs4_label,
 	.set	= nfs4_xattr_set_nfs4_label,
 };
-
-#else
-
-static ssize_t
-nfs4_listxattr_nfs4_label(struct inode *inode, char *list, size_t list_len)
-{
-	return 0;
-}
 
 #endif
 
@@ -10995,7 +10974,7 @@ const struct nfs4_minor_version_ops *nfs_v4_minor_ops[] = {
 
 static ssize_t nfs4_listxattr(struct dentry *dentry, char *list, size_t size)
 {
-	ssize_t error, error2, error3, error4 = 0;
+	ssize_t error, error2, error3;
 	size_t left = size;
 
 	error = generic_listxattr(dentry, list, left);
@@ -11006,10 +10985,9 @@ static ssize_t nfs4_listxattr(struct dentry *dentry, char *list, size_t size)
 		left -= error;
 	}
 
-	error2 = nfs4_listxattr_nfs4_label(d_inode(dentry), list, left);
+	error2 = security_inode_listsecurity(d_inode(dentry), list, left);
 	if (error2 < 0)
 		return error2;
-
 	if (list) {
 		list += error2;
 		left -= error2;
@@ -11018,18 +10996,8 @@ static ssize_t nfs4_listxattr(struct dentry *dentry, char *list, size_t size)
 	error3 = nfs4_listxattr_nfs4_user(d_inode(dentry), list, left);
 	if (error3 < 0)
 		return error3;
-	if (list) {
-		list += error3;
-		left -= error3;
-	}
 
-	if (!nfs_server_capable(d_inode(dentry), NFS_CAP_SECURITY_LABEL)) {
-		error4 = security_inode_listsecurity(d_inode(dentry), list, left);
-		if (error4 < 0)
-			return error4;
-	}
-
-	error += error2 + error3 + error4;
+	error += error2 + error3;
 	if (size && error > size)
 		return -ERANGE;
 	return error;

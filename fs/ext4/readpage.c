@@ -36,6 +36,7 @@
 #include <linux/bio.h>
 #include <linux/fs.h>
 #include <linux/buffer_head.h>
+#include <linux/blk-crypto.h>
 #include <linux/blkdev.h>
 #include <linux/highmem.h>
 #include <linux/prefetch.h>
@@ -130,7 +131,8 @@ static void bio_post_read_processing(struct bio_post_read_ctx *ctx)
 		ctx->cur_step++;
 		fallthrough;
 	case STEP_VERITY:
-		if (ctx->enabled_steps & (1 << STEP_VERITY)) {
+		if (IS_ENABLED(CONFIG_FS_VERITY) &&
+		    ctx->enabled_steps & (1 << STEP_VERITY)) {
 			INIT_WORK(&ctx->work, verity_work);
 			fsverity_enqueue_verify_work(&ctx->work);
 			return;
@@ -345,7 +347,7 @@ int ext4_mpage_readpages(struct inode *inode,
 		if (bio && (last_block_in_bio != first_block - 1 ||
 			    !fscrypt_mergeable_bio(bio, inode, next_block))) {
 		submit_and_realloc:
-			submit_bio(bio);
+			blk_crypto_submit_bio(bio);
 			bio = NULL;
 		}
 		if (bio == NULL) {
@@ -371,14 +373,14 @@ int ext4_mpage_readpages(struct inode *inode,
 		if (((map.m_flags & EXT4_MAP_BOUNDARY) &&
 		     (relative_block == map.m_len)) ||
 		    (first_hole != blocks_per_folio)) {
-			submit_bio(bio);
+			blk_crypto_submit_bio(bio);
 			bio = NULL;
 		} else
 			last_block_in_bio = first_block + blocks_per_folio - 1;
 		continue;
 	confused:
 		if (bio) {
-			submit_bio(bio);
+			blk_crypto_submit_bio(bio);
 			bio = NULL;
 		}
 		if (!folio_test_uptodate(folio))
@@ -389,7 +391,7 @@ next_page:
 		; /* A label shall be followed by a statement until C23 */
 	}
 	if (bio)
-		submit_bio(bio);
+		blk_crypto_submit_bio(bio);
 	return 0;
 }
 

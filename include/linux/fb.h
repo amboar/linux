@@ -304,10 +304,6 @@ struct fb_ops {
 
 	/* teardown any resources to do with this framebuffer */
 	void (*fb_destroy)(struct fb_info *info);
-
-	/* called at KDB enter and leave time to prepare the console */
-	int (*fb_debug_enter)(struct fb_info *info);
-	int (*fb_debug_leave)(struct fb_info *info);
 };
 
 #ifdef CONFIG_FB_TILEBLITTING
@@ -497,7 +493,6 @@ struct fb_info {
 #if defined(CONFIG_FB_DEVICE)
 	struct device *dev;		/* This is this fb device */
 #endif
-	int class_flag;                    /* private sysfs flags */
 #ifdef CONFIG_FB_TILEBLITTING
 	struct fb_tile_ops *tileops;    /* Tile Blitting */
 #endif
@@ -626,6 +621,15 @@ static inline void lock_fb_info(struct fb_info *info)
 static inline void unlock_fb_info(struct fb_info *info)
 {
 	mutex_unlock(&info->lock);
+}
+
+static inline struct device *dev_of_fbinfo(const struct fb_info *info)
+{
+#ifdef CONFIG_FB_DEVICE
+	return info->dev;
+#else
+	return NULL;
+#endif
 }
 
 static inline void __fb_pad_aligned_buffer(u8 *dst, u32 d_pitch,
