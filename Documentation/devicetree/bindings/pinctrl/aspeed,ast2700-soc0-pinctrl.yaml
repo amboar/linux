@@ -135,21 +135,12 @@ additionalProperties: false
 
 examples:
   - |
-    syscon@12c02000 {
-        compatible = "aspeed,ast2700-scu0", "syscon", "simple-mfd";
-        reg = <0x12c02000 0x1000>;
-        ranges = <0x0 0x12c02000 0x1000>;
-        #address-cells = <1>;
-        #size-cells = <1>;
-        #clock-cells = <1>;
-        #reset-cells = <1>;
+    pinctrl@400 {
+        compatible = "aspeed,ast2700-soc0-pinctrl";
+        reg = <0x400 0x318>;
 
-        pinctrl@400 {
-            compatible = "aspeed,ast2700-soc0-pinctrl";
-            reg = <0x400 0x318>;
-            emmc-state {
-                function = "EMMC";
-                groups = "EMMCG1";
-            };
+        emmc-state {
+            function = "EMMC";
+            groups = "EMMCG1";
         };
     };
