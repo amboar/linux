@@ -46,19 +46,8 @@ properties:
   '#reset-cells':
     const: 1
 
-  memory-region:
-    description:
-      Reserved memory regions used by AST2700 SCU to configure the SSP
-      and TSP address mapping windows.
-    minItems: 1
-    maxItems: 3
-
-  memory-region-names:
-    description:
-      Names corresponding to the AST2700 SSP/TSP mapping windows listed
-      in memory-region.
-    minItems: 1
-    maxItems: 3
+  memory-region: true
+  memory-region-names: true
 
 patternProperties:
   '^p2a-control@[0-9a-f]+$':
@@ -176,41 +165,38 @@ allOf:
       properties:
         compatible:
           contains:
-            enum:
-              - aspeed,ast2700-scu0
+            anyOf:
+              - const: aspeed,ast2700-scu0
+              - const: aspeed,ast2700-scu1
     then:
-      properties:
-        memory-region:
-          items:
-            - description:
-                Reserved memory region mapped through the first SSP address
-                window.
-            - description:
-                Reserved memory region mapped through the second SSP address
-                window.
-            - description:
-                Reserved memory region mapped through the TSP address
-                window.
-
-        memory-region-names:
-          items:
-            - const: ssp-region-0
-            - const: ssp-region-1
-            - const: tsp-region
-
       patternProperties:
         '^p2a-control@[0-9a-f]+$': false
         '^smp-memram@[0-9a-f]+$': false
+
   - if:
       properties:
         compatible:
           contains:
-            enum:
-              - aspeed,ast2700-scu1
+            const: aspeed,ast2700-scu0
     then:
-      patternProperties:
-        '^p2a-control@[0-9a-f]+$': false
-        '^smp-memram@[0-9a-f]+$': false
+      properties:
+        memory-region:
+          items:
+            - description: Region mapped through the first SSP address window.
+            - description: Region mapped through the second SSP address window.
+            - description: Region mapped through the TSP address window.
+
+        memory-region-names:
+          items:
+            - const: ssp-0
+            - const: ssp-1
+            - const: tsp
+      required:
+        - memory-region
+    else:
+      properties:
+        memory-region: false
+        memory-region-names: false
 
 additionalProperties: false
 
@@ -238,8 +224,6 @@ examples:
     };
 
   - |
-    #include <dt-bindings/interrupt-controller/arm-gic.h>
-
     / {
         #address-cells = <2>;
         #size-cells = <2>;
@@ -280,8 +264,7 @@ examples:
 
                 memory-region = <&ssp_region_0>, <&ssp_region_1>,
                                 <&tsp_region>;
-                memory-region-names = "ssp-region-0", "ssp-region-1",
-                                      "tsp-region";
+                memory-region-names = "ssp-0", "ssp-1", "tsp";
 
                 silicon-id@0 {
                     compatible = "aspeed,ast2700-silicon-id", "aspeed,silicon-id";
